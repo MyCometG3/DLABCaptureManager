@@ -129,7 +129,7 @@ public class DLABCaptureManager: NSObject, DLABInputCaptureDelegate {
     /// Will reset offset and encodedSize/visibleSize/aspectRatio.
     public var videoStyle :VideoStyle = .SD_720_486_16_9 {
         didSet {
-            offset = NSSize.zero
+            offset = NSPoint.zero
             encodedSize = videoStyle.encodedSize()
             visibleSize = videoStyle.visibleSize()
             aspectRatio = videoStyle.aspectRatio()
@@ -137,7 +137,7 @@ public class DLABCaptureManager: NSObject, DLABInputCaptureDelegate {
     }
     
     /// Set preferred clean-aperture offset. 0 stands center(default).
-    public var offset = NSSize.zero
+    public var offset = NSPoint.zero
     
     /// ReadOnly encoded size of videoStyle.
     public private(set) var encodedSize = NSSize(width: 720, height: 486)
@@ -248,8 +248,8 @@ public class DLABCaptureManager: NSObject, DLABInputCaptureDelegate {
                 if let vSetting = vSetting {
                     try vSetting.addClapExt(ofWidthN: Int32(visibleSize.width), widthD: 1,
                                             heightN: Int32(visibleSize.height), heightD: 1,
-                                            hOffsetN: Int32(offset.width), hOffsetD: 1,
-                                            vOffsetN: Int32(offset.height), vOffsetD: 1)
+                                            hOffsetN: Int32(offset.x), hOffsetD: 1,
+                                            vOffsetN: Int32(offset.y), vOffsetD: 1)
                     try vSetting.addPaspExt(ofHSpacing: UInt32(aspectRatio.width),
                                             vSpacing: UInt32(aspectRatio.height))
                 }
@@ -337,8 +337,8 @@ public class DLABCaptureManager: NSObject, DLABInputCaptureDelegate {
                     writer.updateAudioSettings = updateAudioSettings
                     
                     writer.videoStyle = videoStyle
-                    writer.clapHOffset = Int(offset.width)
-                    writer.clapVOffset = Int(offset.height)
+                    writer.clapHOffset = Int(offset.x)
+                    writer.clapVOffset = Int(offset.y)
                     writer.encodeVideo = encodeVideo
                     writer.encodeProRes422 = encodeProRes422
                     writer.encodeVideoCodecType = encodeVideoCodecType
