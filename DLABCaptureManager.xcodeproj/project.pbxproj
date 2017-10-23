@@ -7,13 +7,13 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		168CD3311F9EA1980098EC35 /* DLABridging.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 16DC284C1F9C2D1E008AA3A2 /* DLABridging.framework */; };
 		16DC28341F9C2C0C008AA3A2 /* DLABCaptureManager.h in Headers */ = {isa = PBXBuildFile; fileRef = 16DC28321F9C2C0C008AA3A2 /* DLABCaptureManager.h */; settings = {ATTRIBUTES = (Public, ); }; };
 		16DC283F1F9C2C1C008AA3A2 /* CaptureWriter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 16DC283A1F9C2C1C008AA3A2 /* CaptureWriter.swift */; };
 		16DC28401F9C2C1C008AA3A2 /* CaptureTimecodeHelper.swift in Sources */ = {isa = PBXBuildFile; fileRef = 16DC283B1F9C2C1C008AA3A2 /* CaptureTimecodeHelper.swift */; };
 		16DC28411F9C2C1C008AA3A2 /* CaptureAudioPreview.swift in Sources */ = {isa = PBXBuildFile; fileRef = 16DC283C1F9C2C1C008AA3A2 /* CaptureAudioPreview.swift */; };
 		16DC28421F9C2C1C008AA3A2 /* DLABCaptureManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 16DC283D1F9C2C1C008AA3A2 /* DLABCaptureManager.swift */; };
 		16DC28431F9C2C1C008AA3A2 /* VideoStyle.swift in Sources */ = {isa = PBXBuildFile; fileRef = 16DC283E1F9C2C1C008AA3A2 /* VideoStyle.swift */; };
-		16DC284B1F9C2D1E008AA3A2 /* DLABridging.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 16DC284C1F9C2D1E008AA3A2 /* DLABridging.framework */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -33,7 +33,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				16DC284B1F9C2D1E008AA3A2 /* DLABridging.framework in Frameworks */,
+				168CD3311F9EA1980098EC35 /* DLABridging.framework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

@@ -443,12 +443,11 @@ public class DLABCaptureManager: NSObject, DLABInputCaptureDelegate {
     public func findFirstDevice() -> DLABDevice? {
         if currentDevice == nil {
             let browser = DLABBrowser()
-            _ = browser.startForInput()
+            _ = browser.registerDevicesForInput()
             let deviceArray = browser.allDevices
             if let deviceArray = deviceArray, deviceArray.count > 0 {
                 currentDevice = deviceArray.first!
             }
-            _ = browser.stop()
         }
         return currentDevice
     }
