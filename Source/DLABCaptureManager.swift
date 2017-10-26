@@ -442,9 +442,7 @@ public class DLABCaptureManager: NSObject, DLABInputCaptureDelegate {
     
     public func findFirstDevice() -> DLABDevice? {
         if currentDevice == nil {
-            let browser = DLABBrowser()
-            _ = browser.registerDevicesForInput()
-            let deviceArray = browser.allDevices
+            let deviceArray = deviceList()
             if let deviceArray = deviceArray, deviceArray.count > 0 {
                 currentDevice = deviceArray.first!
             }
@@ -464,9 +462,8 @@ public class DLABCaptureManager: NSObject, DLABInputCaptureDelegate {
     
     public func deviceList() -> [DLABDevice]? {
         let browser = DLABBrowser()
-        _ = browser.startForInput()
+        _ = browser.registerDevicesForInput()
         let devciceList = browser.allDevices
-        _ = browser.stop()
         return devciceList
     }
     
