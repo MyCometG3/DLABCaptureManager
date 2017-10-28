@@ -198,11 +198,13 @@ class CaptureAudioPreview: NSObject {
         }
     }
     
-    private func createError(_ status :OSStatus, _ errorString :String?) -> NSError {
+    private func createError(_ status :OSStatus, _ description :String?, _ failureReason :String?) -> NSError {
         let domain = "com.MyCometG3.DLABCaptureManager.ErrorDomain"
         let code = NSInteger(status)
-        let reason = errorString ?? "unknown failureReason"
-        let userInfo :[String:Any] = [NSLocalizedDescriptionKey:reason]
+        let desc = description ?? "unknown description"
+        let reason = failureReason ?? "unknown failureReason"
+        let userInfo :[String:Any] = [NSLocalizedDescriptionKey:desc,
+                                      NSLocalizedFailureReasonErrorKey:reason]
         return NSError(domain: domain, code: code, userInfo: userInfo)
     }
     
@@ -333,7 +335,7 @@ class CaptureAudioPreview: NSObject {
                                                                              alignmentFlag,
                                                                              &blockBuffer)
             if status != 0 {
-                print("ERROR: Failed to get audioBufferList. \(status)")
+                //print("ERROR: Failed to get audioBufferList. \(status)")
                 return status
             }
         }
@@ -360,7 +362,7 @@ class CaptureAudioPreview: NSObject {
                 }
             }
             if status != 0 {
-                print("ERROR: Failed to fill audioQueueBuffer.")
+                //print("ERROR: Failed to fill audioQueueBuffer. (\(status))")
                 return status
             }
             
@@ -380,21 +382,24 @@ class CaptureAudioPreview: NSObject {
     /// - Parameter sampleBuffer: Audio CMSampleBuffer
     public func enqueue(_ sampleBuffer :CMSampleBuffer) throws {
         var status :OSStatus = -1
-        var errorString :String? = nil
+        var errDescription :String? = nil
+        var errReason :String? = nil
         
         queueSync {
             // Get free AudioQueueBuffer
             var aqBufferRef :AudioQueueBufferRef? = nil
             status = findFreeAQBuffer(&aqBufferRef)
             if status != 0 {
-                errorString = "ERROR: AudioQueueBuffer is all in use."
+                errDescription = "\(#function)) (\(#line))"
+                errReason = "ERROR: AudioQueueBuffer is all in use (\(status))"
                 return
             }
             
             // Fill AudioQueueBuffer(dst) from CMSampleBuffer(src)
             status = fillAQBuffer(sampleBuffer, aqBufferRef)
             if status != 0 {
-                errorString = "ERROR: Failed to fill audioQueueBuffer"
+                errDescription = "\(#function)) (\(#line))"
+                errReason = "ERROR: Failed to fill audioQueueBuffer (\(status))"
                 return
             }
             
@@ -405,7 +410,8 @@ class CaptureAudioPreview: NSObject {
                                                  0,
                                                  nil)
                 if status != 0 {
-                    errorString = "ERROR: Failed to enqueue audioQueueBuffer"
+                    errDescription = "\(#function)) (\(#line))"
+                    errReason = "ERROR: Failed to enqueue audioQueueBuffer (\(status))"
                     return
                 }
                 
@@ -414,15 +420,16 @@ class CaptureAudioPreview: NSObject {
         }
         
         if status != 0 {
-            throw createError(status, errorString)
+            throw createError(status, errDescription, errReason)
         }
     }
     
     /// Dispose AudioQueue and AudioQueueBuffers
     public func aqDispose() throws {
         var status :OSStatus = -1
-        var errorString :String? = nil
-        
+        var errDescription :String? = nil
+        var errReason :String? = nil
+
         queueSync {
             if let audioQueue = audioQueue {
                 // Stop AudioQueue first
@@ -440,7 +447,8 @@ class CaptureAudioPreview: NSObject {
                 // Dispose AudioQueue
                 status = AudioQueueDispose(audioQueue, true)
                 if status != 0 {
-                    errorString = "ERROR: Failed to dispose AudioQueue (\(status))"
+                    errDescription = "\(#function)) (\(#line))"
+                    errReason = "ERROR: Failed to dispose AudioQueue (\(status))"
                 }
                 
                 self.processingQueue = nil
@@ -450,15 +458,16 @@ class CaptureAudioPreview: NSObject {
         }
         
         if status != 0 {
-            throw createError(status, errorString)
+            throw createError(status, errDescription, errReason)
         }
     }
     
     /// AudioQueuePrime() wrapper
     public func aqPrime() throws {
         var status :OSStatus = -1
-        var errorString :String? = nil
-        
+        var errDescription :String? = nil
+        var errReason :String? = nil
+
         queueSync {
             if let audioQueue = audioQueue, self.running == false {
                 status = AudioQueuePrime(audioQueue, 0, nil)
@@ -466,15 +475,17 @@ class CaptureAudioPreview: NSObject {
         }
         
         if status != 0 {
-            errorString = "ERROR: Failed to AudioQueuePrime (\(status))"
-            throw createError(status, errorString)
+            errDescription = "\(#function)) (\(#line))"
+            errReason = "ERROR: Failed to AudioQueuePrime (\(status))"
+            throw createError(status, errDescription, errReason)
         }
     }
     
     /// AudioQueueStart() wrapper
     public func aqStart() throws {
         var status :OSStatus = -1
-        var errorString :String? = nil
+        var errDescription :String? = nil
+        var errReason :String? = nil
 
         queueSync {
             if let audioQueue = audioQueue, self.running == false {
@@ -485,15 +496,17 @@ class CaptureAudioPreview: NSObject {
         }
         
         if status != 0 {
-            errorString = "ERROR: Failed to AudioQueueStart (\(status))"
-            throw createError(status, errorString)
+            errDescription = "\(#function)) (\(#line))"
+            errReason = "ERROR: Failed to AudioQueueStart (\(status))"
+            throw createError(status, errDescription, errReason)
         }
     }
     
     /// AudioQueueFlush() wrapper
     public func aqFlush() throws {
         var status :OSStatus = -1
-        var errorString :String? = nil
+        var errDescription :String? = nil
+        var errReason :String? = nil
 
         queueSync {
             if let audioQueue = audioQueue, self.running == true {
@@ -502,16 +515,18 @@ class CaptureAudioPreview: NSObject {
         }
         
         if status != 0 {
-            errorString = "ERROR: Failed to AudioQueueFlush (\(status))"
-            throw createError(status, errorString)
+            errDescription = "\(#function)) (\(#line))"
+            errReason = "ERROR: Failed to AudioQueueFlush (\(status))"
+            throw createError(status, errDescription, errReason)
         }
     }
     
     /// AudioQueueStop() wrapper
     public func aqStop() throws {
         var status :OSStatus = -1
-        var errorString :String? = nil
-        
+        var errDescription :String? = nil
+        var errReason :String? = nil
+
         queueSync {
             if let audioQueue = audioQueue { // , self.running == true
                 status = AudioQueueStop(audioQueue, true)
@@ -521,15 +536,17 @@ class CaptureAudioPreview: NSObject {
         }
         
         if status != 0 {
-            errorString = "ERROR: Failed to AudioQueueStop (\(status))"
-            throw createError(status, errorString)
+            errDescription = "\(#function)) (\(#line))"
+            errReason = "ERROR: Failed to AudioQueueStop (\(status))"
+            throw createError(status, errDescription, errReason)
         }
     }
     
     /// AudioQueuePause() wrapper
     public func aqPause() throws {
         var status :OSStatus = -1
-        var errorString :String? = nil
+        var errDescription :String? = nil
+        var errReason :String? = nil
 
         queueSync {
             if let audioQueue = audioQueue, self.running == true {
@@ -538,15 +555,17 @@ class CaptureAudioPreview: NSObject {
         }
         
         if status != 0 {
-            errorString = "ERROR: Failed to AudioQueuePause (\(status))"
-            throw createError(status, errorString)
+            errDescription = "\(#function)) (\(#line))"
+            errReason = "ERROR: Failed to AudioQueuePause (\(status))"
+            throw createError(status, errDescription, errReason)
         }
     }
     
     /// AudioQueueReset() wrapper
     public func aqReset() throws {
         var status :OSStatus = -1
-        var errorString :String? = nil
+        var errDescription :String? = nil
+        var errReason :String? = nil
 
         queueSync {
             if let audioQueue = audioQueue {
@@ -555,8 +574,9 @@ class CaptureAudioPreview: NSObject {
         }
         
         if status != 0 {
-            errorString = "ERROR: Failed to AudioQueueReset (\(status))"
-            throw createError(status, errorString)
+            errDescription = "\(#function)) (\(#line))"
+            errReason = "ERROR: Failed to AudioQueueReset (\(status))"
+            throw createError(status, errDescription, errReason)
         }
     }
 }
