@@ -451,9 +451,10 @@ class CaptureAudioPreview: NSObject {
                     errReason = "ERROR: Failed to dispose AudioQueue (\(status))"
                 }
                 
-                self.processingQueue = nil
-                self.internalQueue = nil
                 self.audioQueue = nil
+            } else {
+                // Allow multiple call
+                status = 0
             }
         }
         
