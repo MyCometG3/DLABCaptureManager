@@ -288,6 +288,7 @@ public class DLABCaptureManager: NSObject, DLABInputCaptureDelegate {
                     
                     if let audioPreview = audioPreview {
                         try audioPreview.aqDispose()
+                        self.audioPreview = nil
                     }
                 }
             } catch let error as NSError {
