@@ -57,7 +57,7 @@ public class DLABCaptureManager: NSObject, DLABInputCaptureDelegate {
     /// Capture video DLABVideoInputFlag (See DLABConstants.h)
     public var inputFlag :DLABVideoInputFlag = []
     
-    /// Parent NSView for video preview
+    /// Parent NSView for video preview - based on CreateCocoaScreenPreview()
     public weak var parentView :NSView? = nil {
         didSet {
             guard let device = currentDevice else { return }
@@ -72,6 +72,9 @@ public class DLABCaptureManager: NSObject, DLABInputCaptureDelegate {
             }
         }
     }
+    
+    /// Set CaptureVideoPreview view here - based on AVSampleBufferDisplayLayer
+    public weak var videoPreview :CaptureVideoPreview? = nil
     
     /// AudioPreview object
     private var audioPreview :CaptureAudioPreview? = nil
@@ -217,6 +220,10 @@ public class DLABCaptureManager: NSObject, DLABInputCaptureDelegate {
                     try device.setInputScreenPreviewTo(parentView)
                 }
                 
+                if let videoPreview = videoPreview {
+                    videoPreview.prepare()
+                }
+                
                 var displayModeSupportFlag:DLABDisplayModeSupportFlag = .notSupported
                 var vSetting:DLABVideoSetting? = nil
                 var aSetting:DLABAudioSetting? = nil
@@ -284,7 +291,13 @@ public class DLABCaptureManager: NSObject, DLABInputCaptureDelegate {
                     try device.disableAudioInput()
                     device.inputDelegate = nil
                     
-                    try device.setInputScreenPreviewTo(nil)
+                    if let videoPreview = videoPreview {
+                        videoPreview.shutdown()
+                    }
+                    
+                    if let _ = parentView {
+                        try device.setInputScreenPreviewTo(nil)
+                    }
                     
                     if let audioPreview = audioPreview {
                         try audioPreview.aqDispose()
@@ -395,6 +408,10 @@ public class DLABCaptureManager: NSObject, DLABInputCaptureDelegate {
             writer.appendVideoSampleBuffer(sampleBuffer: sampleBuffer)
         }
         
+        if let videoPreview = videoPreview {
+            _ = videoPreview.queueSampleBuffer(sampleBuffer)
+        }
+        
         // support for core_audio_smpte_time
         if supportTimecodeCoreAudio, let timecodeHelper = timecodeHelper {
             let timecodeSampleBuffer = timecodeHelper.createTimeCodeSample(from: sampleBuffer)
@@ -417,6 +434,10 @@ public class DLABCaptureManager: NSObject, DLABInputCaptureDelegate {
                                            of sender:DLABDevice) {
         if let writer = writer {
             writer.appendVideoSampleBuffer(sampleBuffer: sampleBuffer)
+        }
+        
+        if let videoPreview = videoPreview {
+            _ = videoPreview.queueSampleBuffer(sampleBuffer)
         }
         
         // support for VANC timecode

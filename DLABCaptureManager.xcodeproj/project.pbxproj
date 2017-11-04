@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		160397511FA819CF000ED345 /* CaptureVideoPreview.swift in Sources */ = {isa = PBXBuildFile; fileRef = 160397501FA819CF000ED345 /* CaptureVideoPreview.swift */; };
 		168CD3311F9EA1980098EC35 /* DLABridging.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 16DC284C1F9C2D1E008AA3A2 /* DLABridging.framework */; };
 		16DC28341F9C2C0C008AA3A2 /* DLABCaptureManager.h in Headers */ = {isa = PBXBuildFile; fileRef = 16DC28321F9C2C0C008AA3A2 /* DLABCaptureManager.h */; settings = {ATTRIBUTES = (Public, ); }; };
 		16DC283F1F9C2C1C008AA3A2 /* CaptureWriter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 16DC283A1F9C2C1C008AA3A2 /* CaptureWriter.swift */; };
@@ -17,6 +18,7 @@
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
+		160397501FA819CF000ED345 /* CaptureVideoPreview.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CaptureVideoPreview.swift; sourceTree = "<group>"; };
 		16DC282F1F9C2C0C008AA3A2 /* DLABCaptureManager.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; includeInIndex = 0; path = DLABCaptureManager.framework; sourceTree = BUILT_PRODUCTS_DIR; };
 		16DC28321F9C2C0C008AA3A2 /* DLABCaptureManager.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = DLABCaptureManager.h; sourceTree = "<group>"; };
 		16DC28331F9C2C0C008AA3A2 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
@@ -48,6 +50,7 @@
 				16DC283A1F9C2C1C008AA3A2 /* CaptureWriter.swift */,
 				16DC283B1F9C2C1C008AA3A2 /* CaptureTimecodeHelper.swift */,
 				16DC283C1F9C2C1C008AA3A2 /* CaptureAudioPreview.swift */,
+				160397501FA819CF000ED345 /* CaptureVideoPreview.swift */,
 			);
 			path = Source;
 			sourceTree = "<group>";
@@ -171,6 +174,7 @@
 				16DC28431F9C2C1C008AA3A2 /* VideoStyle.swift in Sources */,
 				16DC283F1F9C2C1C008AA3A2 /* CaptureWriter.swift in Sources */,
 				16DC28411F9C2C1C008AA3A2 /* CaptureAudioPreview.swift in Sources */,
+				160397511FA819CF000ED345 /* CaptureVideoPreview.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
