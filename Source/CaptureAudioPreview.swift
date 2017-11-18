@@ -101,7 +101,7 @@ class CaptureAudioPreview: NSObject {
             // - We do not enqueue in callback here (= pull model).
             // - Separate enqueue() is used instead (= push model).
             
-            self.queueSync {
+            self.queueAsync {
                 let count = self.numEnqueuedCountDec(false)
                 
                 // reset bytesize value of returned audioQueueBuffer
@@ -177,7 +177,7 @@ class CaptureAudioPreview: NSObject {
     private func queueSync(_ block :(()->Void)) {
         guard let queue = self.processingQueue else { return }
         
-        if nil != queue.getSpecific(key: processingQueueSpecificKey) {
+        if nil != DispatchQueue.getSpecific(key: processingQueueSpecificKey) {
             block()
         } else {
             queue.sync(execute: block)
@@ -190,7 +190,7 @@ class CaptureAudioPreview: NSObject {
     private func queueAsync(_ block :@escaping ()->Void) {
         guard let queue = self.processingQueue else { return }
         
-        if nil != queue.getSpecific(key: processingQueueSpecificKey) {
+        if nil != DispatchQueue.getSpecific(key: processingQueueSpecificKey) {
             queue.async(execute: block)
             //block()
         } else {

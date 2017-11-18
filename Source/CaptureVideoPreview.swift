@@ -293,7 +293,7 @@ public class CaptureVideoPreview: NSView {
     private func queueSync(_ block :(()->Void)) {
         guard let queue = processingQueue else { return }
         
-        if nil != queue.getSpecific(key: processingQueueSpecificKey) {
+        if nil != DispatchQueue.getSpecific(key: processingQueueSpecificKey) {
             block()
         } else {
             queue.sync(execute: block)
