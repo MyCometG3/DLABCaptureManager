@@ -74,6 +74,10 @@ class CaptureWriter: NSObject {
     public var encodeProRes422 : Bool = true
     /// Set VideoCodec type as kCMVideoCodecType_XXX. Should be compatible w/ videoStyle.
     public var encodeVideoCodecType : CMVideoCodecType? = kCMVideoCodecType_H264
+    /// Set Video target bitrate. default is 0 bps = Undefined.
+    public var encodeVideoBitrate : UInt = 0
+    /// Set Video source frame rate per second.
+    public var encodeVideoFrameRate : Float = 30/1.001
     /// Set output videoStyle template.
     public var videoStyle : VideoStyle = .SD_720_486_16_9
     /// Set preferred clean-aperture horizontal offset. 0 stands center(default).
@@ -216,6 +220,8 @@ class CaptureWriter: NSObject {
         avAssetWriter = try? AVAssetWriter.init(outputURL: url, fileType: AVFileType.mov)
         
         if let avAssetWriter = avAssetWriter {
+            avAssetWriter.movieTimeScale = sampleTimescale
+            
             // Prepare AVAssetWriterInput(s)
             let result = prepareInputMedia()
             if result {
@@ -536,7 +542,31 @@ class CaptureWriter: NSObject {
         }
         
         // video output compression properties
-        var compressionProperties : [CFString:Any] = [:]
+        var compressionProperties : [String:Any] = [:]
+        
+        if encodeVideoBitrate > 0 {
+            compressionProperties[AVVideoAverageBitRateKey] = encodeVideoBitrate
+        }
+        
+        let codecString = videoOutputSettings[AVVideoCodecKey] as! String
+        do {
+            if codecString == "avc1" {
+                compressionProperties[AVVideoProfileLevelKey] = AVVideoProfileLevelH264HighAutoLevel
+                compressionProperties[AVVideoH264EntropyModeKey] = AVVideoH264EntropyModeCABAC
+                compressionProperties[AVVideoAllowFrameReorderingKey] = true
+                compressionProperties[AVVideoMaxKeyFrameIntervalDurationKey] = 1.0
+                compressionProperties[AVVideoExpectedSourceFrameRateKey] = encodeVideoFrameRate
+            }
+        }
+        if #available(OSX 10.13, *) {
+            if codecString == "hvc1" {
+                compressionProperties[AVVideoProfileLevelKey] = kVTProfileLevel_HEVC_Main_AutoLevel as String
+                compressionProperties[AVVideoAllowFrameReorderingKey] = true
+                compressionProperties[AVVideoMaxKeyFrameIntervalDurationKey] = 1.0
+                compressionProperties[AVVideoExpectedSourceFrameRateKey] = encodeVideoFrameRate
+            }
+        }
+
         #if false
             // For H264 encoder (using Main 3.1 maximum bitrate)
             compressionProperties[AVVideoAverageBitRateKey] = 14*1000*1000
@@ -551,8 +581,10 @@ class CaptureWriter: NSObject {
 
         if let fieldDetail = fieldDetail {
             // Use interlaced encoding
-            compressionProperties[kVTCompressionPropertyKey_FieldCount] = 2
-            compressionProperties[kVTCompressionPropertyKey_FieldDetail] = fieldDetail
+            let keyFieldCount = kVTCompressionPropertyKey_FieldCount as String
+            let keyFieldDetail = kVTCompressionPropertyKey_FieldDetail as String
+            compressionProperties[keyFieldCount] = 2
+            compressionProperties[keyFieldDetail] = fieldDetail
         }
         
         if compressionProperties.count > 0 {

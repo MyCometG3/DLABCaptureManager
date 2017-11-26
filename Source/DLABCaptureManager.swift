@@ -118,6 +118,7 @@ public class DLABCaptureManager: NSObject, DLABInputCaptureDelegate {
     public var encodeAudio :Bool = false
     
     /// Set encoded audio target bitrate. Default is 256 * 1024 bps.
+    /// Recommends AAC-LC:64k~/ch, HE-AAC:24k~/ch, HE-AACv2: 12k~/ch.
     public var encodeAudioBitrate :UInt = 256*1024
     
     /// Optional: customise audio encode settings of AVAssetWriterInput.
@@ -159,6 +160,11 @@ public class DLABCaptureManager: NSObject, DLABInputCaptureDelegate {
     
     /// Set VideoCodec type as kCMVideoCodecType_XXX. Should be compatible w/ videoStyle.
     public var encodeVideoCodecType :CMVideoCodecType? = kCMVideoCodecType_AppleProRes422LT
+    
+    /// Set encoded video target bitrate. Default is 0 bps = Undefined.
+    /// BPP=0.20(30fps) 1920x1080=12Mbps, 1280x720=5.3Mbps, 720x486=2.0Mbps.
+    /// BPP=0.20(25fps) 1920x1080=10Mbps, 1280x720=4.4Mbps, 720x576=2.0Mbps.
+    public var encodeVideoBitrate :UInt = 0
     
     /// Optional: For interlaced encoding. Set kCMFormatDescriptionFieldDetail_XXX.
     public var fieldDetail :CFString? = kCMFormatDescriptionFieldDetail_SpatialFirstLineLate
@@ -354,6 +360,8 @@ public class DLABCaptureManager: NSObject, DLABInputCaptureDelegate {
                     writer.clapHOffset = Int(offset.x)
                     writer.clapVOffset = Int(offset.y)
                     writer.encodeVideo = encodeVideo
+                    writer.encodeVideoBitrate = encodeVideoBitrate
+                    writer.encodeVideoFrameRate = calcFPS()
                     writer.encodeProRes422 = encodeProRes422
                     writer.encodeVideoCodecType = encodeVideoCodecType
                     writer.fieldDetail = fieldDetail
@@ -470,6 +478,36 @@ public class DLABCaptureManager: NSObject, DLABInputCaptureDelegate {
             }
         }
         return currentDevice
+    }
+    
+    private func calcFPS() -> Float {
+        let mode2fps :[DLABDisplayMode:Float] = [
+            .modeHD1080p2398    :24.0/1.001,
+            .modeHD1080p24      :24.0,
+            .modePAL            :25.0,
+            .modeHD1080p25      :25.0,
+            .modeHD1080i50      :25.0,
+            .modeNTSC           :30.0/1.001,
+            .modeNTSC2398       :30.0/1.001,
+            .modeHD1080p2997    :30.0/1.001,
+            .modeHD1080i5994    :30.0/1.001,
+            .modeHD1080p30      :30.0,
+            .modeHD1080i6000    :30.0,
+            .modePALp           :50.0,
+            .modeHD720p50       :50.0,
+            .modeHD1080p50      :50.0,
+            .modeNTSCp          :60.0/1.001,
+            .modeHD720p5994     :60.0/1.001,
+            .modeHD1080p5994    :60.0/1.001,
+            .modeHD720p60       :60.0,
+            .modeHD1080p6000    :60.0,
+            // Are .mode2K... or .mode4K... required here?
+        ]
+        
+        if let fps = mode2fps[displayMode] {
+            return fps
+        }
+        return 30.0
     }
     
     private func prepTimecodeHelper() {
