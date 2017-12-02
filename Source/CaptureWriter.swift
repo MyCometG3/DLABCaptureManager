@@ -146,22 +146,22 @@ class CaptureWriter: NSObject {
     
     /// Append Video SampleBuffer
     public func appendVideoSampleBuffer(sampleBuffer :CMSampleBuffer) {
-        queue?.sync {
-            writeVideoSampleBuffer(sampleBuffer)
+        queue?.async {
+            self.writeVideoSampleBuffer(sampleBuffer)
         }
     }
     
     /// Append Audio SampleBuffer
     public func appendAudioSampleBuffer(sampleBuffer :CMSampleBuffer) {
-        queue?.sync {
-            writeAudioSampleBuffer(sampleBuffer)
+        queue?.async {
+            self.writeAudioSampleBuffer(sampleBuffer)
         }
     }
     
     /// Append Timecode SampleBuffer
     public func appendTimecodeSampleBuffer(sampleBuffer :CMSampleBuffer) {
-        queue?.sync {
-            writeTimecodeSampleBuffer(sampleBuffer)
+        queue?.async {
+            self.writeTimecodeSampleBuffer(sampleBuffer)
         }
     }
     

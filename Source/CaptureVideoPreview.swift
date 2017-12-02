@@ -39,6 +39,8 @@ public class CaptureVideoPreview: NSView {
     private var baseOffsetInSec :Float64 = 0.0
     /// Enqueued hostTime
     private var lastQueuedHostTime :UInt64 = 0
+    /// last SampleBuffer's Presentation endTime
+    private var prevEndTime = kCMTimeZero
 
     /// CoreVideo DisplayLink
     private var displayLink :CVDisplayLink? = nil
@@ -172,12 +174,19 @@ public class CaptureVideoPreview: NSView {
     ///
     /// - Parameter sampleBuffer: Video CMSampleBuffer
     /// - Returns: False if failed to enqueue
-    public func queueSampleBuffer(_ sampleBuffer :CMSampleBuffer) -> Bool {
+    public func queueSampleBuffer(_ sampleBuffer :CMSampleBuffer) {
         var result :Bool = false
-        queueSync {
+        queueAsync {
+            let startTime :CMTime = CMSampleBufferGetPresentationTimeStamp(sampleBuffer)
+            let duration :CMTime = CMSampleBufferGetDuration(sampleBuffer)
+            let endTime :CMTime = CMTimeAdd(startTime, duration)
+            let startInSec :Float64 = CMTimeGetSeconds(startTime)
+            // let durationInSec :Float64 = CMTimeGetSeconds(duration)
+            // let endInSec :Float64 = CMTimeGetSeconds(endTime)
+            
             if useDisplayLink {
                 // Check/Activate displayLink
-                result = activateDisplayLink()
+                result = self.activateDisplayLink()
                 if !result {
                     print("ERROR: DisplayLink is not ready.")
                     return
@@ -186,12 +195,48 @@ public class CaptureVideoPreview: NSView {
                 result = true
             }
             
-            // Retain new sampleBuffer
-            self.newSampleBuffer = sampleBuffer
+            // Validate samplebuffer if time gap (lost sample) is detected
+            var isGAP = false
+            do {
+                let compResult :Int32 = CMTimeCompare(startTime, self.prevEndTime)
+                if startTime.value > 0 && compResult != 0 {
+                    //print("##### GAP DETECTED!!!")
+                    isGAP = true
+                }
+            }
+            
+            if isGAP {
+                if let layer = self.videoLayer {
+                    layer.flushAndRemoveImage()
+                }
+                else { print("!!!\(#line)") }
+            }
+            
+            // if sampleBuffer is delayed, mark it as "_DisplayImmediately".
+            var isLate = false
+            if let layer = self.videoLayer, let timebase = layer.controlTimebase {
+                let tbTime = CMTimeGetSeconds(CMTimebaseGetTime(timebase))
+                if tbTime >= startInSec {
+                    //print("##### Delayed!")
+                    isLate = true
+                }
+            }
+            else { print("!!!\(#line)") }
+            
+            if isLate {
+                if let attachments :CFArray = CMSampleBufferGetSampleAttachmentsArray(sampleBuffer, true) {
+                    let ptr :UnsafeRawPointer = CFArrayGetValueAtIndex(attachments, 0)
+                    let dict :CFMutableDictionary = unsafeBitCast(ptr, to: CFMutableDictionary.self)
+                    let key = Unmanaged.passUnretained(kCMSampleAttachmentKey_DisplayImmediately).toOpaque()
+                    let value = Unmanaged.passUnretained(kCFBooleanTrue).toOpaque()
+                    CFDictionaryAddValue(dict, key, value)
+                }
+                else { print("!!!\(#line)") }
+            }
             
             if self.baseHostTime == 0 {
-                // Initialize Timebase - This is first sampleBuffer
-                resetTimebase(sampleBuffer)
+                // Initialize Timebase if this is first sampleBuffer
+                self.resetTimebase(sampleBuffer)
             }
             
             if enqueueImmediately {
@@ -206,6 +251,9 @@ public class CaptureVideoPreview: NSView {
                         
                         // Release enqueued CMSampleBuffer
                         self.newSampleBuffer = nil
+                        
+                        //
+                        self.prevEndTime = endTime
                     } else {
                         var eStr = ""
                         if !statusOK { eStr += "StatusFailed " }
@@ -213,9 +261,27 @@ public class CaptureVideoPreview: NSView {
                         print("ERROR: videoLayer is not ready to enqueue. \(eStr)")
                     }
                 }
+                else { print("!!!\(#line)") }
+            } else {
+                // Retain new sampleBuffer
+                self.newSampleBuffer = sampleBuffer
             }
+            
+            // Adjust TimebaseTime if required (enqueue may hog time)
+            if let layer = self.videoLayer, let timebase = layer.controlTimebase {
+                let tbTime = CMTimeGetSeconds(CMTimebaseGetTime(timebase))
+                let time2 = CMTimeSubtract(startTime, CMTimeMultiplyByFloat64(duration, Float64(0.5)))
+                let time2InSec = CMTimeGetSeconds(time2)
+                if tbTime > time2InSec {
+                    //print("##### Adjust!!! " + String(format:"%0.6f", (time2InSec - tbTime)))
+                    
+                    // roll back timebase to make some delay for a half of sample duration
+                    _ = CMTimebaseSetTime(timebase, time2)
+                    _ = CMTimebaseSetRate(timebase, 1.0)
+                }
+            }
+            else { print("!!!\(#line)") }
         }
-        return result
     }
     
     /* ================================================ */
@@ -226,7 +292,7 @@ public class CaptureVideoPreview: NSView {
     ///
     /// - Parameter sampleBuffer: timebase source sampleBuffer. Set nil to reset to shutdown.
     private func resetTimebase(_ sampleBuffer :CMSampleBuffer?) {
-        queueSync {
+        do {
             if let sampleBuffer = sampleBuffer {
                 // start Media Time from sampleBuffer's presentation time
                 let time = CMSampleBufferGetPresentationTimeStamp(sampleBuffer)
@@ -278,6 +344,8 @@ public class CaptureVideoPreview: NSView {
             
             // Set controlTimebase
             if status == noErr, let timebase = timebase {
+                _ = CMTimebaseSetRate(timebase, 0.0)
+                _ = CMTimebaseSetTime(timebase, kCMTimeZero)
                 videoLayer.controlTimebase = timebase
             } else {
                 print("ERROR: Failed to setup videoLayer's controlTimebase")
@@ -300,6 +368,20 @@ public class CaptureVideoPreview: NSView {
         }
     }
 
+    /// Process block in async
+    ///
+    /// - Parameter block: block to process
+    private func queueAsync(_ block :@escaping ()->Void) {
+        guard let queue = self.processingQueue else { return }
+        
+        if nil != DispatchQueue.getSpecific(key: processingQueueSpecificKey) {
+            queue.async(execute: block)
+            //block()
+        } else {
+            queue.async(execute: block)
+        }
+    }
+    
     /* ================================================ */
     // MARK: - private functions (DisplayLink)
     /* ================================================ */
@@ -375,13 +457,13 @@ public class CaptureVideoPreview: NSView {
     /// - Returns: False if failed to enqueue
     private func requestSampleAt(_ outHostTime :UInt64) -> Bool {
         var result :Bool = false
-        queueSync {
+        do {
             self.lastRequestedHostTime = outHostTime
     
             // Check if no sampleBuffer is queued yet
             if self.baseHostTime == 0 {
                 print("ERROR: No video sample is queued yet.")
-                return
+                return false
             }
     
             // Try delayed enqueue

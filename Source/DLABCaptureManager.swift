@@ -417,7 +417,7 @@ public class DLABCaptureManager: NSObject, DLABInputCaptureDelegate {
         }
         
         if let videoPreview = videoPreview {
-            _ = videoPreview.queueSampleBuffer(sampleBuffer)
+            videoPreview.queueSampleBuffer(sampleBuffer)
         }
         
         // support for core_audio_smpte_time
@@ -445,7 +445,7 @@ public class DLABCaptureManager: NSObject, DLABInputCaptureDelegate {
         }
         
         if let videoPreview = videoPreview {
-            _ = videoPreview.queueSampleBuffer(sampleBuffer)
+            videoPreview.queueSampleBuffer(sampleBuffer)
         }
         
         // support for VANC timecode
