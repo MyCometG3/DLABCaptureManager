@@ -14,13 +14,24 @@ private let enqueueImmediately = true
 private let useDisplayLink = false // experimental
 private let checkPresentationTime = false // experimental
 
-public class CaptureVideoPreview: NSView {
+public class CaptureVideoPreview: NSView, CALayerDelegate {
     /* ================================================ */
     // MARK: - public properties
     /* ================================================ */
     
     /// Backing layer of AVSampleBufferDisplayLayer
     public private(set) var videoLayer :AVSampleBufferDisplayLayer? = nil
+    
+    /// User preferred pixel aspect ratio. (1.0 = square pixel)
+    public var customPixelAspectRatio :CGFloat? = nil
+    /// sampleBuffer native pixel aspect ratio (pasp ImageDescription Extension)
+    public private(set) var sampleAspectRatio :CGFloat? = nil
+    /// image size of encoded rect
+    public private(set) var sampleEncodedSize :CGSize? = nil
+    /// image size of clean aperture (aspect ratio applied)
+    public private(set) var sampleCleanSize : CGSize? = nil
+    /// image size of encoded rect (aspect ratio applied)
+    public private(set) var sampleProductionSize :CGSize? = nil
     
     /* ================================================ */
     // MARK: - private properties
@@ -167,6 +178,12 @@ public class CaptureVideoPreview: NSView {
             if let videoLayer = self.videoLayer {
                 videoLayer.flushAndRemoveImage()
             }
+            
+            //
+            sampleAspectRatio = nil
+            sampleEncodedSize = nil
+            sampleCleanSize = nil
+            sampleProductionSize = nil
         }
     }
     
@@ -175,14 +192,21 @@ public class CaptureVideoPreview: NSView {
     /// - Parameter sampleBuffer: Video CMSampleBuffer
     /// - Returns: False if failed to enqueue
     public func queueSampleBuffer(_ sampleBuffer :CMSampleBuffer) {
+        // Force layout videoLayer if required
+        self.updateLayout(sampleBuffer)
+        
         var result :Bool = false
         queueAsync {
             let startTime :CMTime = CMSampleBufferGetPresentationTimeStamp(sampleBuffer)
             let duration :CMTime = CMSampleBufferGetDuration(sampleBuffer)
             let endTime :CMTime = CMTimeAdd(startTime, duration)
             let startInSec :Float64 = CMTimeGetSeconds(startTime)
-            // let durationInSec :Float64 = CMTimeGetSeconds(duration)
-            // let endInSec :Float64 = CMTimeGetSeconds(endTime)
+            let durationInSec :Float64 = CMTimeGetSeconds(duration)
+            let endInSec :Float64 = CMTimeGetSeconds(endTime)
+            #if false
+                // Dump timing information
+                print(startInSec, endInSec, durationInSec)
+            #endif
             
             if useDisplayLink {
                 // Check/Activate displayLink
@@ -195,44 +219,11 @@ public class CaptureVideoPreview: NSView {
                 result = true
             }
             
-            // Validate samplebuffer if time gap (lost sample) is detected
-            var isGAP = false
-            do {
-                let compResult :Int32 = CMTimeCompare(startTime, self.prevEndTime)
-                if startTime.value > 0 && compResult != 0 {
-                    //print("##### GAP DETECTED!!!")
-                    isGAP = true
-                }
-            }
-            
-            if isGAP {
-                if let layer = self.videoLayer {
-                    layer.flushAndRemoveImage()
-                }
-                else { print("!!!\(#line)") }
-            }
-            
-            // if sampleBuffer is delayed, mark it as "_DisplayImmediately".
-            var isLate = false
-            if let layer = self.videoLayer, let timebase = layer.controlTimebase {
-                let tbTime = CMTimeGetSeconds(CMTimebaseGetTime(timebase))
-                if tbTime >= startInSec {
-                    //print("##### Delayed!")
-                    isLate = true
-                }
-            }
-            else { print("!!!\(#line)") }
-            
-            if isLate {
-                if let attachments :CFArray = CMSampleBufferGetSampleAttachmentsArray(sampleBuffer, true) {
-                    let ptr :UnsafeRawPointer = CFArrayGetValueAtIndex(attachments, 0)
-                    let dict :CFMutableDictionary = unsafeBitCast(ptr, to: CFMutableDictionary.self)
-                    let key = Unmanaged.passUnretained(kCMSampleAttachmentKey_DisplayImmediately).toOpaque()
-                    let value = Unmanaged.passUnretained(kCFBooleanTrue).toOpaque()
-                    CFDictionaryAddValue(dict, key, value)
-                }
-                else { print("!!!\(#line)") }
-            }
+            #if false
+                // Experimental
+                self.checkGAP(startTime)
+                self.checkDelayed(startTime, startInSec, sampleBuffer)
+            #endif
             
             if self.baseHostTime == 0 {
                 // Initialize Timebase if this is first sampleBuffer
@@ -267,20 +258,10 @@ public class CaptureVideoPreview: NSView {
                 self.newSampleBuffer = sampleBuffer
             }
             
-            // Adjust TimebaseTime if required (enqueue may hog time)
-            if let layer = self.videoLayer, let timebase = layer.controlTimebase {
-                let tbTime = CMTimeGetSeconds(CMTimebaseGetTime(timebase))
-                let time2 = CMTimeSubtract(startTime, CMTimeMultiplyByFloat64(duration, Float64(0.5)))
-                let time2InSec = CMTimeGetSeconds(time2)
-                if tbTime > time2InSec {
-                    //print("##### Adjust!!! " + String(format:"%0.6f", (time2InSec - tbTime)))
-                    
-                    // roll back timebase to make some delay for a half of sample duration
-                    _ = CMTimebaseSetTime(timebase, time2)
-                    _ = CMTimebaseSetRate(timebase, 1.0)
-                }
-            }
-            else { print("!!!\(#line)") }
+            #if false
+                // Experimental
+                self.adjustTimebase(startTime, duration)
+            #endif
         }
     }
     
@@ -328,15 +309,13 @@ public class CaptureVideoPreview: NSView {
         
         // Prepare backing VideoLayer
         videoLayer = AVSampleBufferDisplayLayer()
-        if let videoLayer = videoLayer {
-            videoLayer.bounds = self.bounds
-            videoLayer.position = CGPoint(x: self.bounds.midX, y: self.bounds.midY)
-            videoLayer.videoGravity = .resizeAspect
-            videoLayer.backgroundColor = NSColor.gray.cgColor
-            
-            self.layer = videoLayer
-            self.wantsLayer = true
-            
+        self.wantsLayer = true
+        if let videoLayer = videoLayer, let parentLayer = self.layer {
+            videoLayer.videoGravity = .resize
+            videoLayer.delegate = self
+            parentLayer.addSublayer(videoLayer)
+            parentLayer.backgroundColor = NSColor.gray.cgColor
+
             // Create new CMTimebase using HostTimeClock
             let clock :CMClock = CMClockGetHostTimeClock()
             var timebase :CMTimebase? = nil
@@ -379,6 +358,303 @@ public class CaptureVideoPreview: NSView {
             //block()
         } else {
             queue.async(execute: block)
+        }
+    }
+    
+    /* ================================================ */
+    // MARK: -
+    /* ================================================ */
+
+    /// Parse ImageBuffer properties of CMSampleBuffer
+    ///
+    /// - Parameter sampleBuffer: CMSampleBuffer to parse
+    private func extractSampleRect(_ sampleBuffer :CMSampleBuffer) {
+        let pixelBuffer :CVImageBuffer? = CMSampleBufferGetImageBuffer(sampleBuffer)
+        if let pixelBuffer = pixelBuffer {
+            let encodedSize = CGSize(width: CVPixelBufferGetWidth(pixelBuffer),
+                                     height: CVPixelBufferGetHeight(pixelBuffer))
+            
+            var sampleAspect : CGFloat = 1.0
+            if let dict = extractCFDictionary(pixelBuffer, kCVImageBufferPixelAspectRatioKey) {
+                let aspect = extractCGSize(dict,
+                                           kCVImageBufferPixelAspectRatioHorizontalSpacingKey,
+                                           kCVImageBufferPixelAspectRatioVerticalSpacingKey)
+                if aspect != CGSize.zero {
+                    sampleAspect = aspect.width / aspect.height
+                }
+            }
+            
+            var cleanSize : CGSize = encodedSize // Initial value is full size (= no clean aperture)
+            if let dict = extractCFDictionary(pixelBuffer, kCVImageBufferCleanApertureKey) {
+                let clapWidth = extractRational(dict, kCMFormatDescriptionKey_CleanApertureWidthRational)
+                let clapHeight = extractRational(dict, kCMFormatDescriptionKey_CleanApertureHeightRational)
+                if clapWidth != CGFloat.nan && clapHeight != CGFloat.nan {
+                    let clapSize = CGSize(width: clapWidth, height: clapHeight)
+                    cleanSize = CGSize(width: clapSize.width * sampleAspect,
+                                       height: clapSize.height)
+                }
+            }
+            
+            let productionSize = CGSize(width: encodedSize.width * sampleAspect,
+                                        height: encodedSize.height)
+            
+            self.sampleAspectRatio = sampleAspect
+            self.sampleEncodedSize = encodedSize
+            self.sampleCleanSize = cleanSize
+            self.sampleProductionSize = productionSize
+        }
+    }
+    
+    /// Extract CFDictionary attachment of specified key from CVPixelBuffer
+    ///
+    /// - Parameters:
+    ///   - pixelBuffer: source CVPixelBuffer
+    ///   - key: Attachment Key
+    /// - Returns: Attachment Value (CFDictionary)
+    private func extractCFDictionary(_ pixelBuffer :CVImageBuffer, _ key :CFString) -> CFDictionary? {
+        var dict :CFDictionary? = nil
+        if let umCF = CVBufferGetAttachment(pixelBuffer, key, nil) {
+            // umCF :Unmanaged<CFTypeRef>
+            dict = (umCF.takeUnretainedValue() as! CFDictionary)
+        }
+        return dict
+    }
+    
+    /// Extract CFNumber value of specified key from CFDictionary
+    ///
+    /// - Parameters:
+    ///   - dict: source CFDictionary
+    ///   - key: Key
+    /// - Returns: value (CFNumber)
+    private func extractCFNumber(_ dict :CFDictionary, _ key :CFString) -> CFNumber? {
+        var num :CFNumber? = nil
+        let keyOpaque = Unmanaged.passUnretained(key).toOpaque()
+        if let ptr = CFDictionaryGetValue(dict, keyOpaque) {
+            num = Unmanaged<CFNumber>.fromOpaque(ptr).takeUnretainedValue()
+        }
+        return num
+    }
+    
+    /// Extract CFArray value of specified key from CFDictionary
+    ///
+    /// - Parameters:
+    ///   - dict: source CFDictionary
+    ///   - key: Key
+    /// - Returns: value (CFArray)
+    private func extractCFArray(_ dict :CFDictionary, _ key :CFString) -> CFArray? {
+        var array :CFArray? = nil
+        let keyOpaque = Unmanaged.passUnretained(key).toOpaque()
+        if let ptr = CFDictionaryGetValue(dict, keyOpaque) {
+            array = Unmanaged<CFArray>.fromOpaque(ptr).takeUnretainedValue()
+        }
+        return array
+    }
+    
+    /// Extract CGFloat value of specified key from CFDictionary
+    ///
+    /// - Parameters:
+    ///   - dict: source CFDictionary
+    ///   - key: Key
+    /// - Returns: value (CGFloat)
+    private func extractCGFloat(_ dict :CFDictionary, _ key :CFString) -> CGFloat {
+        var val :CGFloat = CGFloat.nan
+        if let num = extractCFNumber(dict, key) {
+            if CFNumberGetValue(num, .cgFloatType, &val) == false {
+                val = CGFloat.nan
+            }
+        }
+        return val
+    }
+    
+    /// Extract CGSize value of specified key pair from CFDictionary
+    ///
+    /// - Parameters:
+    ///   - dict: source CFDictionary
+    ///   - key1: Key 1 for size.width
+    ///   - key2: Key 2 for size.height
+    /// - Returns: value (CGSize)
+    private func extractCGSize(_ dict :CFDictionary, _ key1 :CFString, _ key2 :CFString) -> CGSize {
+        var size :CGSize = CGSize.zero
+        let val1 = extractCGFloat(dict, key1)
+        let val2 = extractCGFloat(dict, key2)
+        if val1 != CGFloat.nan && val2 != CGFloat.nan {
+            size = CGSize(width: val1, height: val2)
+        }
+        return size
+    }
+
+    /// Extract CGFloat value of specified rational key from CFDictionary
+    ///
+    /// - Parameters:
+    ///   - dict: source CFDictionary
+    ///   - key: Key for CFArray of 2 CFNumbers: numerator, denominator
+    /// - Returns: ratio value calculated from Rational (CGFloat)
+    private func extractRational(_ dict :CFDictionary, _ key :CFString) -> CGFloat {
+        var val :CGFloat = CGFloat.nan
+        let numArray :CFArray? = extractCFArray(dict, key)
+        if let numArray = numArray, CFArrayGetCount(numArray) == 2 {
+            guard let ptr0 = CFArrayGetValueAtIndex(numArray, 0) else { return val }
+            guard let ptr1 = CFArrayGetValueAtIndex(numArray, 1) else { return val }
+            let num0 = Unmanaged<CFNumber>.fromOpaque(ptr0).takeUnretainedValue()
+            let num1 = Unmanaged<CFNumber>.fromOpaque(ptr1).takeUnretainedValue()
+            var val0 :CGFloat = 1.0
+            var val1 :CGFloat = 1.0
+            if (CFNumberGetValue(num0, .cgFloatType, &val0) && CFNumberGetValue(num1, .cgFloatType, &val1)) {
+                val = (val0 / val1)
+            }
+        }
+        return val
+    }
+    
+    /* ================================================ */
+    // MARK: -
+    /* ================================================ */
+
+    /// Force layout videoLayer if required
+    ///
+    /// - Parameter sampleBuffer: CMSampleBuffer
+    private func updateLayout(_ sampleBuffer :CMSampleBuffer) {
+        // initial layout check
+        let initialLayout :Bool = (self.sampleAspectRatio == nil)
+        if initialLayout {
+            DispatchQueue.main.async {
+                if let parentLayer = self.layer {
+                    self.extractSampleRect(sampleBuffer)
+                    self.layoutSublayers(of: parentLayer)
+                }
+            }
+        } else {
+            // self.extractSampleRect(sampleBuffer)
+        }
+    }
+    
+    /// Experimental : Check Time GAP
+    ///
+    /// - Parameter startTime: CMTime
+    private func checkGAP(_ startTime :CMTime) {
+        // Validate samplebuffer if time gap (lost sample) is detected
+        var isGAP = false
+        do {
+            let compResult :Int32 = CMTimeCompare(startTime, self.prevEndTime)
+            if startTime.value > 0 && compResult != 0 {
+                //print("##### GAP DETECTED!!!")
+                isGAP = true
+            }
+        }
+        
+        if isGAP {
+            if let layer = self.videoLayer {
+                layer.flushAndRemoveImage()
+            }
+            else { print("!!!\(#line)") }
+        }
+    }
+    
+    /// Experimental : Check late arrival
+    ///
+    /// - Parameters:
+    ///   - startTime: CMTime
+    ///   - startInSec: Float64
+    ///   - sampleBuffer: CMSampleBuffer
+    private func checkDelayed(_ startTime :CMTime, _ startInSec :Float64, _ sampleBuffer :CMSampleBuffer) {
+        // if sampleBuffer is delayed, mark it as "_DisplayImmediately".
+        var isLate = false
+        if let layer = self.videoLayer, let timebase = layer.controlTimebase {
+            let tbTime = CMTimeGetSeconds(CMTimebaseGetTime(timebase))
+            if tbTime >= startInSec {
+                //print("##### Delayed!")
+                isLate = true
+            }
+        }
+        else { print("!!!\(#line)") }
+        
+        if isLate {
+            if let attachments :CFArray = CMSampleBufferGetSampleAttachmentsArray(sampleBuffer, true) {
+                let ptr :UnsafeRawPointer = CFArrayGetValueAtIndex(attachments, 0)
+                let dict :CFMutableDictionary = unsafeBitCast(ptr, to: CFMutableDictionary.self)
+                let key = Unmanaged.passUnretained(kCMSampleAttachmentKey_DisplayImmediately).toOpaque()
+                let value = Unmanaged.passUnretained(kCFBooleanTrue).toOpaque()
+                CFDictionaryAddValue(dict, key, value)
+            }
+            else { print("!!!\(#line)") }
+        }
+    }
+    
+    /// Experimental : Adjust timebase
+    ///
+    /// - Parameters:
+    ///   - startTime: CMTime
+    ///   - duration: CMTime
+    private func adjustTimebase(_ startTime :CMTime, _ duration :CMTime) {
+        // Adjust TimebaseTime if required (enqueue may hog time)
+        if let layer = self.videoLayer, let timebase = layer.controlTimebase {
+            let tbTime = CMTimeGetSeconds(CMTimebaseGetTime(timebase))
+            let time2 = CMTimeSubtract(startTime, CMTimeMultiplyByFloat64(duration, Float64(0.5)))
+            let time2InSec = CMTimeGetSeconds(time2)
+            if tbTime > time2InSec {
+                //print("##### Adjust!!! " + String(format:"%0.6f", (time2InSec - tbTime)))
+                
+                // roll back timebase to make some delay for a half of sample duration
+                _ = CMTimebaseSetTime(timebase, time2)
+                _ = CMTimebaseSetRate(timebase, 1.0)
+            }
+        }
+        else { print("!!!\(#line)") }
+    }
+
+    /* ================================================ */
+    // MARK: - CALayerDelegate and more
+    /* ================================================ */
+    
+    public func layoutSublayers(of layer: CALayer) {
+        if let parentLayer = self.layer, let videoLayer = videoLayer {
+            if layer == parentLayer {
+                let viewSize = self.bounds.size
+                let layerSize = preferredSize(of: videoLayer)
+                
+                CATransaction.begin()
+                CATransaction.setDisableActions(true)
+                videoLayer.frame = CGRect(x: (viewSize.width-layerSize.width)/2,
+                                          y: (viewSize.height-layerSize.height)/2,
+                                          width: layerSize.width,
+                                          height: layerSize.height)
+                videoLayer.videoGravity = .resize
+                CATransaction.commit()
+                
+                //print (#function, layerSize)
+            }
+        }
+    }
+    
+    public func preferredSize(of layer :CALayer) -> CGSize {
+        if layer == videoLayer {
+            var layerSize = self.bounds.size
+            let viewSize :CGSize = self.bounds.size
+            let viewAspect :CGFloat = viewSize.width / viewSize.height
+            
+            var requestAspect :CGFloat = viewAspect
+            if let encSize = sampleEncodedSize, let proSize = sampleProductionSize {
+                if let aspect = customPixelAspectRatio {
+                    requestAspect = (encSize.width / encSize.height) * aspect
+                } else {
+                    requestAspect = (proSize.width / proSize.height)
+                }
+            }
+            
+            let adjustRatio :CGFloat = requestAspect / viewAspect
+            
+            if viewAspect < requestAspect {
+                // Shrink vertically
+                layerSize = CGSize(width:viewSize.width,
+                                   height: viewSize.height / adjustRatio)
+            } else {
+                // Shrink horizontally
+                layerSize = CGSize(width: viewSize.width * adjustRatio,
+                                   height: viewSize.height )
+            }
+            return layerSize
+        } else {
+            return self.bounds.size
         }
     }
     
