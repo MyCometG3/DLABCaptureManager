@@ -117,6 +117,9 @@ public class DLABCaptureManager: NSObject, DLABInputCaptureDelegate {
     /// Set YES to encode audio in AAC. No to use LPCM.
     public var encodeAudio :Bool = false
     
+    /// Set audioFormatID as kAudioFormatXXXX.
+    public var encodeAudioFormatID : AudioFormatID = kAudioFormatMPEG4AAC
+    
     /// Set encoded audio target bitrate. Default is 256 * 1024 bps.
     /// Recommends AAC-LC:64k~/ch, HE-AAC:24k~/ch, HE-AACv2: 12k~/ch.
     public var encodeAudioBitrate :UInt = 256*1024
@@ -353,6 +356,7 @@ public class DLABCaptureManager: NSObject, DLABInputCaptureDelegate {
                     writer.sampleTimescale = sampleTimescale
                     
                     writer.encodeAudio = encodeAudio
+                    writer.encodeAudioFormatID = encodeAudioFormatID
                     writer.encodeAudioBitrate = encodeAudioBitrate
                     writer.updateAudioSettings = updateAudioSettings
                     
