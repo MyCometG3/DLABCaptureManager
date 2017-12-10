@@ -33,6 +33,9 @@ public class CaptureVideoPreview: NSView, CALayerDelegate {
     /// image size of encoded rect (aspect ratio applied)
     public private(set) var sampleProductionSize :CGSize? = nil
     
+    /// Verbose mode (debugging purpose)
+    public var verbose :Bool = false
+    
     /* ================================================ */
     // MARK: - private properties
     /* ================================================ */
@@ -245,11 +248,11 @@ public class CaptureVideoPreview: NSView, CALayerDelegate {
                         
                         //
                         self.prevEndTime = endTime
-                    } else {
+                    } else if self.verbose {
                         var eStr = ""
                         if !statusOK { eStr += "StatusFailed " }
                         if !ready { eStr += "NotReady " }
-                        print("ERROR: videoLayer is not ready to enqueue. \(eStr)")
+                        print("NOTICE: videoLayer is not ready to enqueue. \(eStr)")
                     }
                 }
                 else { print("!!!\(#line)") }
@@ -537,7 +540,10 @@ public class CaptureVideoPreview: NSView, CALayerDelegate {
         do {
             let compResult :Int32 = CMTimeCompare(startTime, self.prevEndTime)
             if startTime.value > 0 && compResult != 0 {
-                //print("##### GAP DETECTED!!!")
+                if self.verbose {
+                    print("NOTICE: GAP DETECTED!")
+                }
+                
                 isGAP = true
             }
         }
@@ -562,7 +568,10 @@ public class CaptureVideoPreview: NSView, CALayerDelegate {
         if let layer = self.videoLayer, let timebase = layer.controlTimebase {
             let tbTime = CMTimeGetSeconds(CMTimebaseGetTime(timebase))
             if tbTime >= startInSec {
-                //print("##### Delayed!")
+                if self.verbose {
+                    print("NOTICE: DELAY DETECTED!")
+                }
+                
                 isLate = true
             }
         }
@@ -592,7 +601,9 @@ public class CaptureVideoPreview: NSView, CALayerDelegate {
             let time2 = CMTimeSubtract(startTime, CMTimeMultiplyByFloat64(duration, Float64(0.5)))
             let time2InSec = CMTimeGetSeconds(time2)
             if tbTime > time2InSec {
-                //print("##### Adjust!!! " + String(format:"%0.6f", (time2InSec - tbTime)))
+                if self.verbose {
+                    print("NOTICE: ADJUST! " + String(format:"%0.6f", (time2InSec - tbTime)))
+                }
                 
                 // roll back timebase to make some delay for a half of sample duration
                 _ = CMTimebaseSetTime(timebase, time2)
@@ -764,11 +775,11 @@ public class CaptureVideoPreview: NSView, CALayerDelegate {
                     } else {
                         print("ERROR: No video sample is available for specified HostTime.")
                     }
-                } else {
+                } else if verbose {
                     var eStr = ""
                     if !statusOK { eStr += "StatusFailed " }
                     if !ready { eStr += "NotReady " }
-                    print("ERROR: videoLayer is not ready to enqueue. \(eStr)")
+                    print("NOTICE: videoLayer is not ready to enqueue. \(eStr)")
                 }
             }
     
