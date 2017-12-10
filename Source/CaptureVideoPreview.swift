@@ -78,6 +78,12 @@ public class CaptureVideoPreview: NSView, CALayerDelegate {
     required public init?(coder decoder: NSCoder) {
         super.init(coder: decoder)
         
+        // setup() moved to awakeFromNib()
+    }
+    
+    override public func awakeFromNib() {
+        super.awakeFromNib()
+        
         setup()
     }
     
