@@ -122,6 +122,14 @@ public class CaptureVideoPreview: NSView, CALayerDelegate {
             // Clean up first
             shutdown()
             
+            // Add CMSampleBufferDisplayLayer to SubLayer
+            if let parentLayer = self.layer, let videoLayer = self.videoLayer {
+                if videoLayer.superlayer == nil {
+                    // print("addSubLayer")
+                    parentLayer.addSublayer(videoLayer)
+                }
+            }
+            
             if useDisplayLink {
                 // Create CVDisplayLink
                 var newDisplayLink :CVDisplayLink? = nil
@@ -165,6 +173,12 @@ public class CaptureVideoPreview: NSView, CALayerDelegate {
     /// Shutdown videoPreview and CVDisplayLink.
     public func shutdown() {
         queueSync {
+            // Remove CMSampleBufferDisplayLayer from SubLayer
+            if let videoLayer = videoLayer, videoLayer.superlayer != nil {
+                // print("removeSubLayer")
+                videoLayer.removeFromSuperlayer()
+            }
+            
             if useDisplayLink {
                 // Unregister observer
                 NotificationCenter.default.removeObserver(self)
@@ -322,7 +336,6 @@ public class CaptureVideoPreview: NSView, CALayerDelegate {
         if let videoLayer = videoLayer, let parentLayer = self.layer {
             videoLayer.videoGravity = .resize
             videoLayer.delegate = self
-            parentLayer.addSublayer(videoLayer)
             parentLayer.backgroundColor = NSColor.gray.cgColor
 
             // Create new CMTimebase using HostTimeClock
