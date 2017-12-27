@@ -27,7 +27,7 @@ public class DLABCaptureManager: NSObject, DLABInputCaptureDelegate {
     /// Capture audio bit depth (See DLABConstants.h)
     public var audioDepth :DLABAudioSampleType = .type16bitInteger
     
-    /// Capture audio channels
+    /// Capture audio channels. 2 for Stereo. 8 or 16 for discrete.
     public var audioChannels :UInt32 = 2
     
     /// Capture audio bit rate (See DLABConstants.h)
