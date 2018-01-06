@@ -44,6 +44,9 @@ public class DLABCaptureManager: NSObject, DLABInputCaptureDelegate {
         }
     }
     
+    /// True while audio capture is enabled
+    private var audioCaptureEnabled :Bool = false
+    
     /* ============================================ */
     // MARK: - properties - Capturing video
     /* ============================================ */
@@ -240,9 +243,12 @@ public class DLABCaptureManager: NSObject, DLABInputCaptureDelegate {
                                                               pixelFormat: pixelFormat,
                                                               inputFlag: inputFlag,
                                                               supportedAs: &displayModeSupportFlag)
-                try aSetting = device.createInputAudioSetting(of: audioDepth,
-                                                              channelCount: audioChannels,
-                                                              sampleRate: audioRate)
+                if audioChannels > 0 {
+                    // Currently 2, 8, 16 are valid (See IDeckLinkInput::EnableAudioInput)
+                    try aSetting = device.createInputAudioSetting(of: audioDepth,
+                                                                  channelCount: audioChannels,
+                                                                  sampleRate: audioRate)
+                }
                 
                 // NOTE: AVAssetWriter Buggy behavior found...
                 // If "passthru write CMPixelBuffer w/ clap", auto generated tapt
@@ -270,17 +276,24 @@ public class DLABCaptureManager: NSObject, DLABInputCaptureDelegate {
                                             vSpacing: UInt32(aspectRatio.height))
                 }
                 
-                if let vSetting = vSetting, let aSetting = aSetting, displayModeSupportFlag != .notSupported {
-                    if let audioFormatDescription = aSetting.audioFormatDescription {
-                        audioPreview = CaptureAudioPreview(audioFormatDescription)
-                        if let audioPreview = audioPreview {
-                            audioPreview.volume = Float32(volume)
-                        }
-                    }
-                    
+                if let vSetting = vSetting, displayModeSupportFlag != .notSupported {
                     device.inputDelegate = self
                     try device.enableVideoInput(with: vSetting)
-                    try device.enableAudioInput(with: aSetting)
+                    
+                    audioCaptureEnabled = false
+                    if let aSetting = aSetting {
+                        if let audioFormatDescription = aSetting.audioFormatDescription {
+                            audioPreview = CaptureAudioPreview(audioFormatDescription)
+                            if let audioPreview = audioPreview {
+                                audioPreview.volume = Float32(volume)
+                            }
+                        }
+                        
+                        try device.enableAudioInput(with: aSetting)
+                        
+                        audioCaptureEnabled = true
+                    }
+                    
                     try device.startStreams()
                     
                     running = true
@@ -297,7 +310,10 @@ public class DLABCaptureManager: NSObject, DLABInputCaptureDelegate {
                 if running {
                     try device.stopStreams()
                     try device.disableVideoInput()
-                    try device.disableAudioInput()
+                    if audioCaptureEnabled {
+                        audioCaptureEnabled = false
+                        try device.disableAudioInput()
+                    }
                     device.inputDelegate = nil
                     
                     if let videoPreview = videoPreview {
@@ -309,6 +325,7 @@ public class DLABCaptureManager: NSObject, DLABInputCaptureDelegate {
                     }
                     
                     if let audioPreview = audioPreview {
+                        try audioPreview.aqStop()
                         try audioPreview.aqDispose()
                         self.audioPreview = nil
                     }
