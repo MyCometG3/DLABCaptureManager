@@ -54,7 +54,7 @@ public class CaptureVideoPreview: NSView, CALayerDelegate {
     /// Enqueued hostTime
     private var lastQueuedHostTime :UInt64 = 0
     /// last SampleBuffer's Presentation endTime
-    private var prevEndTime = kCMTimeZero
+    private var prevEndTime = CMTime.zero
 
     /// CoreVideo DisplayLink
     private var displayLink :CVDisplayLink? = nil
@@ -301,8 +301,8 @@ public class CaptureVideoPreview: NSView, CALayerDelegate {
                 // start Media Time from sampleBuffer's presentation time
                 let time = CMSampleBufferGetPresentationTimeStamp(sampleBuffer)
                 if let layer = self.videoLayer, let timebase = layer.controlTimebase {
-                    _ = CMTimebaseSetTime(timebase, time)
-                    _ = CMTimebaseSetRate(timebase, 1.0)
+                    _ = CMTimebaseSetTime(timebase, time: time)
+                    _ = CMTimebaseSetRate(timebase, rate: 1.0)
                 }
                 
                 // Record base HostTime value as video timebase
@@ -311,8 +311,8 @@ public class CaptureVideoPreview: NSView, CALayerDelegate {
             } else {
                 // reset Media Time to Zero
                 if let layer = self.videoLayer, let timebase = layer.controlTimebase {
-                    _ = CMTimebaseSetRate(timebase, 0.0)
-                    _ = CMTimebaseSetTime(timebase, kCMTimeZero)
+                    _ = CMTimebaseSetRate(timebase, rate: 0.0)
+                    _ = CMTimebaseSetTime(timebase, time: CMTime.zero)
                 }
                 
                 // Clear base HostTime value
@@ -341,12 +341,12 @@ public class CaptureVideoPreview: NSView, CALayerDelegate {
             // Create new CMTimebase using HostTimeClock
             let clock :CMClock = CMClockGetHostTimeClock()
             var timebase :CMTimebase? = nil
-            let status :OSStatus = CMTimebaseCreateWithMasterClock(kCFAllocatorDefault, clock, &timebase)
+            let status :OSStatus = CMTimebaseCreateWithMasterClock(allocator: kCFAllocatorDefault, masterClock: clock, timebaseOut: &timebase)
             
             // Set controlTimebase
             if status == noErr, let timebase = timebase {
-                _ = CMTimebaseSetRate(timebase, 0.0)
-                _ = CMTimebaseSetTime(timebase, kCMTimeZero)
+                _ = CMTimebaseSetRate(timebase, rate: 0.0)
+                _ = CMTimebaseSetTime(timebase, time: CMTime.zero)
                 videoLayer.controlTimebase = timebase
             } else {
                 print("ERROR: Failed to setup videoLayer's controlTimebase")
@@ -597,7 +597,7 @@ public class CaptureVideoPreview: NSView, CALayerDelegate {
         else { print("!!!\(#line)") }
         
         if isLate {
-            if let attachments :CFArray = CMSampleBufferGetSampleAttachmentsArray(sampleBuffer, true) {
+            if let attachments :CFArray = CMSampleBufferGetSampleAttachmentsArray(sampleBuffer, createIfNecessary: true) {
                 let ptr :UnsafeRawPointer = CFArrayGetValueAtIndex(attachments, 0)
                 let dict :CFMutableDictionary = unsafeBitCast(ptr, to: CFMutableDictionary.self)
                 let key = Unmanaged.passUnretained(kCMSampleAttachmentKey_DisplayImmediately).toOpaque()
@@ -617,7 +617,7 @@ public class CaptureVideoPreview: NSView, CALayerDelegate {
         // Adjust TimebaseTime if required (enqueue may hog time)
         if let layer = self.videoLayer, let timebase = layer.controlTimebase {
             let tbTime = CMTimeGetSeconds(CMTimebaseGetTime(timebase))
-            let time2 = CMTimeSubtract(startTime, CMTimeMultiplyByFloat64(duration, Float64(0.5)))
+            let time2 = CMTimeSubtract(startTime, CMTimeMultiplyByFloat64(duration, multiplier: Float64(0.5)))
             let time2InSec = CMTimeGetSeconds(time2)
             if tbTime > time2InSec {
                 if self.verbose {
@@ -625,8 +625,8 @@ public class CaptureVideoPreview: NSView, CALayerDelegate {
                 }
                 
                 // roll back timebase to make some delay for a half of sample duration
-                _ = CMTimebaseSetTime(timebase, time2)
-                _ = CMTimebaseSetRate(timebase, 1.0)
+                _ = CMTimebaseSetTime(timebase, time: time2)
+                _ = CMTimebaseSetRate(timebase, rate: 1.0)
             }
         }
         else { print("!!!\(#line)") }

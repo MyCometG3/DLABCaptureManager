@@ -327,13 +327,13 @@ class CaptureAudioPreview: NSObject {
             let alignmentFlag = kCMSampleBufferFlag_AudioBufferList_Assure16ByteAlignment
 
             status = CMSampleBufferGetAudioBufferListWithRetainedBlockBuffer(sampleBuffer,
-                                                                             &bufferListSizeNeededOut,
-                                                                             &audioBufferList,
-                                                                             sizeOfAudioBufferList,
-                                                                             kCFAllocatorDefault,
-                                                                             kCFAllocatorDefault,
-                                                                             alignmentFlag,
-                                                                             &blockBuffer)
+                                                                             bufferListSizeNeededOut: &bufferListSizeNeededOut,
+                                                                             bufferListOut: &audioBufferList,
+                                                                             bufferListSize: sizeOfAudioBufferList,
+                                                                             blockBufferAllocator: kCFAllocatorDefault,
+                                                                             blockBufferMemoryAllocator: kCFAllocatorDefault,
+                                                                             flags: alignmentFlag,
+                                                                             blockBufferOut: &blockBuffer)
             if status != 0 {
                 //print("ERROR: Failed to get audioBufferList. \(status)")
                 return status

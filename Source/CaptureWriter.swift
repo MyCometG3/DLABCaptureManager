@@ -20,9 +20,9 @@ class CaptureWriter: NSObject {
     /// Recording duration in sec.
     public private(set) var duration : Float64 = 0.0
     /// CMTime for start time.
-    public private(set) var startTime : CMTime = kCMTimeZero
+    public private(set) var startTime : CMTime = CMTime.zero
     /// CMTime for end time.
-    public private(set) var endTime : CMTime = kCMTimeZero
+    public private(set) var endTime : CMTime = CMTime.zero
     /// Flag if starting CMTime is valid or not
     public private(set) var isInitialTSReady : Bool = false
     
@@ -297,8 +297,8 @@ class CaptureWriter: NSObject {
         do {
             // reset TS variables and duration
             isInitialTSReady = false
-            startTime = kCMTimeZero
-            endTime = kCMTimeZero
+            startTime = CMTime.zero
+            endTime = CMTime.zero
             duration = 0.0
         }
         objc_sync_exit(self)
@@ -339,8 +339,8 @@ class CaptureWriter: NSObject {
                 self.duration = 0.0
             }
             self.isInitialTSReady = false
-            self.startTime = kCMTimeZero
-            self.endTime = kCMTimeZero
+            self.startTime = CMTime.zero
+            self.endTime = CMTime.zero
         }
         objc_sync_exit(self)
     }
@@ -615,7 +615,7 @@ class CaptureWriter: NSObject {
                 if let asbd_p = asbd_p {
                     var layoutSize : Int = 0
                     let acl_p : UnsafePointer<AudioChannelLayout>? =
-                        CMAudioFormatDescriptionGetChannelLayout(sourceAudioFormatDescription, &layoutSize)
+                        CMAudioFormatDescriptionGetChannelLayout(sourceAudioFormatDescription, sizeOut: &layoutSize)
                     if let acl_p = acl_p {
                         let avacl = AVAudioChannelLayout.init(layout: acl_p)
                         avaf = AVAudioFormat.init(streamDescription: asbd_p, channelLayout: avacl)
@@ -678,9 +678,9 @@ class CaptureWriter: NSObject {
     // MARK: -
     /* ============================================ */
     
-    private func descriptionForStatus(_ status :AVAssetWriterStatus) -> String {
+    private func descriptionForStatus(_ status :AVAssetWriter.Status) -> String {
         // In case of faulty state
-        let statusArray : [AVAssetWriterStatus : String] = [
+        let statusArray : [AVAssetWriter.Status : String] = [
             .unknown    : "AVAssetWriterStatus.Unknown",
             .writing    : "AVAssetWriterStatus.Writing",
             .completed  : "AVAssetWriterStatus.Completed",

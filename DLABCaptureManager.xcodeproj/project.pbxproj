@@ -133,6 +133,7 @@
 				TargetAttributes = {
 					16DC282E1F9C2C0C008AA3A2 = {
 						CreatedOnToolsVersion = 9.0.1;
+						LastSwiftMigration = 1010;
 						ProvisioningStyle = Automatic;
 					};
 				};
@@ -315,7 +316,7 @@
 				PRODUCT_BUNDLE_IDENTIFIER = com.mycometg3.DLABCaptureManager;
 				PRODUCT_NAME = "$(TARGET_NAME:c99extidentifier)";
 				SKIP_INSTALL = YES;
-				SWIFT_VERSION = 4.0;
+				SWIFT_VERSION = 4.2;
 			};
 			name = Debug;
 		};
@@ -337,7 +338,7 @@
 				PRODUCT_BUNDLE_IDENTIFIER = com.mycometg3.DLABCaptureManager;
 				PRODUCT_NAME = "$(TARGET_NAME:c99extidentifier)";
 				SKIP_INSTALL = YES;
-				SWIFT_VERSION = 4.0;
+				SWIFT_VERSION = 4.2;
 			};
 			name = Release;
 		};

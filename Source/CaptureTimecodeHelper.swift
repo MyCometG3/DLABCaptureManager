@@ -92,17 +92,17 @@ class CaptureTimecodeHelper: NSObject {
         
         // Extract timingInfo from video sample
         var timingInfo = CMSampleTimingInfo()
-        CMSampleBufferGetSampleTimingInfo(videoSampleBuffer, 0, &timingInfo)
+        CMSampleBufferGetSampleTimingInfo(videoSampleBuffer, at: 0, timingInfoOut: &timingInfo)
         
         // Prepare CMTimeCodeFormatDescription
         var description : CMTimeCodeFormatDescription? = nil
-        status = CMTimeCodeFormatDescriptionCreate(kCFAllocatorDefault,
-                                                   timeCodeFormatType,
-                                                   duration,
-                                                   quanta,
-                                                   tcType,
-                                                   nil,
-                                                   &description)
+        status = CMTimeCodeFormatDescriptionCreate(allocator: kCFAllocatorDefault,
+                                                   timeCodeFormatType: timeCodeFormatType,
+                                                   frameDuration: duration,
+                                                   frameQuanta: quanta,
+                                                   flags: tcType,
+                                                   extensions: nil,
+                                                   formatDescriptionOut: &description)
         if status != noErr || description == nil {
             print("ERROR: Could not create format description.")
             return nil
@@ -110,18 +110,18 @@ class CaptureTimecodeHelper: NSObject {
         
         // Create new SampleBuffer
         var timingInfoTMP = timingInfo
-        status = CMSampleBufferCreate(kCFAllocatorDefault,
-                                      dataBuffer,
-                                      true,
-                                      nil,
-                                      nil,
-                                      description,
-                                      1,
-                                      1,
-                                      &timingInfoTMP,
-                                      1,
-                                      &sizes,
-                                      &sampleBuffer)
+        status = CMSampleBufferCreate(allocator: kCFAllocatorDefault,
+                                      dataBuffer: dataBuffer,
+                                      dataReady: true,
+                                      makeDataReadyCallback: nil,
+                                      refcon: nil,
+                                      formatDescription: description,
+                                      sampleCount: 1,
+                                      sampleTimingEntryCount: 1,
+                                      sampleTimingArray: &timingInfoTMP,
+                                      sampleSizeEntryCount: 1,
+                                      sampleSizeArray: &sizes,
+                                      sampleBufferOut: &sampleBuffer)
         if status != noErr || sampleBuffer == nil {
             print("ERROR: Could not create sample buffer.")
             return nil
@@ -141,8 +141,8 @@ class CaptureTimecodeHelper: NSObject {
     private func extractCVSMPTETime(from sampleBuffer: CMSampleBuffer) -> CVSMPTETime? {
         // Extract sampleBuffer attachment for SMPTETime
         let smpteTimeData = CMGetAttachment(sampleBuffer,
-                                            smpteTimeKey as CFString,
-                                            nil)
+                                            key: smpteTimeKey as CFString,
+                                            attachmentModeOut: nil)
         
         // Create SMPTETime struct from sampleBuffer attachment
         var smpteTime: CVSMPTETime? = nil
@@ -218,15 +218,15 @@ class CaptureTimecodeHelper: NSObject {
         /* ============================================ */
         
         // Allocate BlockBuffer
-        status = CMBlockBufferCreateWithMemoryBlock(kCFAllocatorDefault,
-                                                    nil,
-                                                    sizes,
-                                                    kCFAllocatorDefault,
-                                                    nil,
-                                                    0,
-                                                    sizes,
-                                                    kCMBlockBufferAssureMemoryNowFlag,
-                                                    &dataBuffer)
+        status = CMBlockBufferCreateWithMemoryBlock(allocator: kCFAllocatorDefault,
+                                                    memoryBlock: nil,
+                                                    blockLength: sizes,
+                                                    blockAllocator: kCFAllocatorDefault,
+                                                    customBlockSource: nil,
+                                                    offsetToData: 0,
+                                                    dataLength: sizes,
+                                                    flags: kCMBlockBufferAssureMemoryNowFlag,
+                                                    blockBufferOut: &dataBuffer)
         if status != noErr || dataBuffer == nil {
             print("ERROR: Could not create block buffer.")
             return nil
@@ -237,16 +237,16 @@ class CaptureTimecodeHelper: NSObject {
             switch sizes {
             case MemoryLayout<Int32>.size:
                 var frameNumber32BE = frameNumber32.bigEndian
-                status = CMBlockBufferReplaceDataBytes(&frameNumber32BE,
-                                                       dataBuffer,
-                                                       0,
-                                                       sizes)
+                status = CMBlockBufferReplaceDataBytes(with: &frameNumber32BE,
+                                                       blockBuffer: dataBuffer,
+                                                       offsetIntoDestination: 0,
+                                                       dataLength: sizes)
             case MemoryLayout<Int64>.size:
                 var frameNumber64BE = frameNumber64.bigEndian
-                status = CMBlockBufferReplaceDataBytes(&frameNumber64BE,
-                                                       dataBuffer,
-                                                       0,
-                                                       sizes)
+                status = CMBlockBufferReplaceDataBytes(with: &frameNumber64BE,
+                                                       blockBuffer: dataBuffer,
+                                                       offsetIntoDestination: 0,
+                                                       dataLength: sizes)
             default:
                 status = -1
             }
