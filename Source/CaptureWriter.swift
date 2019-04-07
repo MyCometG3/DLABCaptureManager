@@ -524,8 +524,8 @@ class CaptureWriter: NSObject {
         
         // video hardware encoder
         let encoderSpecification: [CFString: Any] = [
-            kVTVideoEncoderSpecification_EnableHardwareAcceleratedVideoEncoder : kCFBooleanTrue,
-            kVTVideoEncoderSpecification_RequireHardwareAcceleratedVideoEncoder : kCFBooleanFalse
+            kVTVideoEncoderSpecification_EnableHardwareAcceleratedVideoEncoder : kCFBooleanTrue!,
+            kVTVideoEncoderSpecification_RequireHardwareAcceleratedVideoEncoder : kCFBooleanFalse!
         ]
         videoOutputSettings[AVVideoEncoderSpecificationKey] = encoderSpecification
         
