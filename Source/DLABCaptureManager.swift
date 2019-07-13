@@ -604,7 +604,6 @@ public class DLABCaptureManager: NSObject, DLABInputCaptureDelegate {
             info["pixelFormat"] = NSFileTypeForHFSTypeCode(setting.pixelFormat.rawValue) // uint32_t -> UInt32
             info["inputFlag"] = setting.inputFlag.rawValue // uint32_t -> UInt32
             info["outputFlag"] = setting.outputFlag.rawValue // uint32_t -> UInt32
-            info["displayModeSupport"] = setting.displayModeSupport.rawValue // uint32_t -> UInt32
             info["rowBytes"] = setting.rowBytes // long -> int64_t -> Int64
             info["videoFormatDescription"] = setting.videoFormatDescription.debugDescription // String
         }
