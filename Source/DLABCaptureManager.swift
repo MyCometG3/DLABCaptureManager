@@ -3,7 +3,7 @@
 //  DLABCaptureManager
 //
 //  Created by Takashi Mochizuki on 2017/10/09.
-//  Copyright © 2017年 MyCometG3. All rights reserved.
+//  Copyright © 2017, 2019年 MyCometG3. All rights reserved.
 //
 
 import Cocoa
@@ -236,13 +236,11 @@ public class DLABCaptureManager: NSObject, DLABInputCaptureDelegate {
                     videoPreview.prepare()
                 }
                 
-                var displayModeSupportFlag:DLABDisplayModeSupportFlag = .notSupported
                 var vSetting:DLABVideoSetting? = nil
                 var aSetting:DLABAudioSetting? = nil
                 try vSetting = device.createInputVideoSetting(of: displayMode,
                                                               pixelFormat: pixelFormat,
-                                                              inputFlag: inputFlag,
-                                                              supportedAs: &displayModeSupportFlag)
+                                                              inputFlag: inputFlag)
                 if audioChannels > 0 {
                     // Currently 2, 8, 16 are valid (See IDeckLinkInput::EnableAudioInput)
                     try aSetting = device.createInputAudioSetting(of: audioDepth,
@@ -276,7 +274,7 @@ public class DLABCaptureManager: NSObject, DLABInputCaptureDelegate {
                                             vSpacing: UInt32(aspectRatio.height))
                 }
                 
-                if let vSetting = vSetting, displayModeSupportFlag != .notSupported {
+                if let vSetting = vSetting {
                     device.inputDelegate = self
                     try device.enableVideoInput(with: vSetting)
                     
