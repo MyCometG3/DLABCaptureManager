@@ -112,6 +112,17 @@ public class CaptureVideoPreview: NSView, CALayerDelegate {
         }
     }
     
+    override public var wantsUpdateLayer: Bool {
+        if useDisplayLink {
+            return false
+        }
+        return true
+    }
+    
+    override public func updateLayer() {
+        layoutSublayers(of: self.layer!)
+    }
+    
     /* ================================================ */
     // MARK: - public functions
     /* ================================================ */
