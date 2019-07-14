@@ -214,9 +214,12 @@ public class CaptureVideoPreview: NSView, CALayerDelegate {
     ///
     /// - Parameter sampleBuffer: Video CMSampleBuffer
     /// - Returns: False if failed to enqueue
-    public func queueSampleBuffer(_ sampleBuffer :CMSampleBuffer) {
+    public func queueSampleBuffer(_ sb :CMSampleBuffer) {
         // Force layout videoLayer if required
-        self.updateLayout(sampleBuffer)
+        self.updateLayout(sb)
+        
+        guard let sampleBuffer = deeperCopyVideoSampleBuffer(sbIn: sb)
+            else { return }
         
         var result :Bool = false
         queueAsync {
@@ -381,6 +384,91 @@ public class CaptureVideoPreview: NSView, CALayerDelegate {
         } else {
             queue.async(execute: block)
         }
+    }
+    
+    private func deeperCopyVideoSampleBuffer(sbIn :CMSampleBuffer) -> CMSampleBuffer? {
+        var fdOut :CMFormatDescription? = nil
+        var pbOut :CVPixelBuffer? = nil
+        var sbOut :CMSampleBuffer? = nil
+        
+        // Duplicate CMFormatDescription
+        let fd :CMFormatDescription? = CMSampleBufferGetFormatDescription(sbIn)
+        if let fd = fd {
+            let dim :CMVideoDimensions = CMVideoFormatDescriptionGetDimensions(fd)
+            let subType :CMVideoCodecType = CMFormatDescriptionGetMediaSubType(fd)
+            var ext :CFDictionary? = CMFormatDescriptionGetExtensions(fd)
+            #if false
+            if let ext1 = ext { // remove cleanaperture extension if available
+                let clap :UnsafeRawPointer = unsafeBitCast(kCMFormatDescriptionExtension_CleanAperture,
+                                                           to: UnsafeRawPointer.self)
+                if CFDictionaryContainsKey(ext1, clap) {
+                    let count :CFIndex = CFDictionaryGetCount(ext1)
+                    let ext2 :CFMutableDictionary = CFDictionaryCreateMutableCopy(kCFAllocatorDefault, count, ext1)
+                    CFDictionaryRemoveValue(ext2, clap)
+                    ext = CFDictionaryCreateCopy(kCFAllocatorDefault, ext2)
+                }
+            }
+            #endif
+            CMVideoFormatDescriptionCreate(allocator: kCFAllocatorDefault,
+                                           codecType: subType, width: dim.width, height: dim.height, extensions: ext,
+                                           formatDescriptionOut: &fdOut)
+        }
+        
+        // Duplicate CVPixelBuffer
+        let pb :CVPixelBuffer? = CMSampleBufferGetImageBuffer(sbIn)
+        if let pb = pb {
+            let width :Int = CVPixelBufferGetWidth(pb)
+            let height :Int = CVPixelBufferGetHeight(pb)
+            let format :OSType = CVPixelBufferGetPixelFormatType(pb)
+            let stride :Int = CVPixelBufferGetBytesPerRow(pb)
+            let dict = [
+                kCVPixelBufferPixelFormatTypeKey: NSFileTypeForHFSTypeCode(format) as CFString,
+                kCVPixelBufferWidthKey: width as CFNumber,
+                kCVPixelBufferHeightKey: height as CFNumber,
+                kCVPixelBufferBytesPerRowAlignmentKey: stride as CFNumber
+            ] as CFDictionary
+            CVPixelBufferCreate(kCFAllocatorDefault, width, height, format, dict, &pbOut)
+            
+            if let pbOut = pbOut {
+                CVPixelBufferLockBaseAddress(pb, .readOnly)
+                CVPixelBufferLockBaseAddress(pbOut, [])
+                if CVPixelBufferIsPlanar(pbOut) {
+                    let numPlane = CVPixelBufferGetPlaneCount(pbOut)
+                    for plane in 0..<numPlane {
+                        let src = CVPixelBufferGetBaseAddressOfPlane(pb, plane)
+                        let dst = CVPixelBufferGetBaseAddressOfPlane(pbOut, plane)
+                        let height = CVPixelBufferGetHeightOfPlane(pb, plane)
+                        let stride = CVPixelBufferGetBytesPerRowOfPlane(pb, plane)
+                        memcpy(dst, src, height*stride)
+                    }
+                } else {
+                    let src = CVPixelBufferGetBaseAddress(pb)
+                    let dst = CVPixelBufferGetBaseAddress(pbOut)
+                    let height = CVPixelBufferGetHeight(pb)
+                    let stride = CVPixelBufferGetBytesPerRow(pb)
+                    memcpy(dst, src, height*stride)
+                }
+                CVPixelBufferUnlockBaseAddress(pb, .readOnly)
+                CVPixelBufferUnlockBaseAddress(pbOut, [])
+            }
+        }
+        
+        // Create new CMSampleBuffer
+        if let fd = fdOut, let pb = pbOut {
+            let dict = CMFormatDescriptionGetExtensions(fd)
+            CVBufferSetAttachments(pb, dict!, .shouldPropagate)
+            
+            var timeInfo = CMSampleTimingInfo()
+            CMSampleBufferGetSampleTimingInfo(sbIn, at: 0, timingInfoOut: &timeInfo)
+            
+            CMSampleBufferCreateReadyWithImageBuffer(allocator: kCFAllocatorDefault,
+                                                     imageBuffer: pb,
+                                                     formatDescription: fd,
+                                                     sampleTiming: &timeInfo,
+                                                     sampleBufferOut: &sbOut)
+        }
+        
+        return sbOut
     }
     
     /* ================================================ */
