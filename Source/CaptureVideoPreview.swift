@@ -105,21 +105,17 @@ public class CaptureVideoPreview: NSView, CALayerDelegate {
     }
     
     override public func draw(_ dirtyRect: NSRect) {
-        super.draw(dirtyRect)
-        
-        if useDisplayLink {
-            _ = activateDisplayLink()
-        }
+        updateLayer()
     }
     
     override public var wantsUpdateLayer: Bool {
-        if useDisplayLink {
-            return false
-        }
         return true
     }
     
     override public func updateLayer() {
+        if useDisplayLink {
+            _ = activateDisplayLink()
+        }
         layoutSublayers(of: self.layer!)
     }
     
@@ -137,7 +133,9 @@ public class CaptureVideoPreview: NSView, CALayerDelegate {
             if let parentLayer = self.layer, let videoLayer = self.videoLayer {
                 if videoLayer.superlayer == nil {
                     // print("addSubLayer")
-                    parentLayer.addSublayer(videoLayer)
+                    DispatchQueue.main.async {
+                        parentLayer.addSublayer(videoLayer)
+                    }
                 }
             }
             
