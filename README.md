@@ -5,8 +5,11 @@ Simple AV Capture Swift API for DLABridging (Objective-C API).
 - __Requirement__: MacOS X 10.11 or later.
 - __Capture Device__: Blackmagic Intensity Shuttle, or other DeckLink devices.
 - __Restriction__: Only 8 or 10 bit yuv, or 8 bit rgb are supported.
-- __Dependency__: DeckLinkAPI.framework from Blackmagic_Desktop_Video_Macintosh_10.9.5 or later.
+- __Dependency__: DeckLinkAPI.framework from Blackmagic_Desktop_Video_Macintosh_11.2 or later.
 - __Dependency__: DLABridging.framework
+
+NOTE: This framework is under development.
+NOTE: Compressed capture is not supported.
 
 #### Basic usage (capture)
 
@@ -55,9 +58,9 @@ Simple AV Capture Swift API for DLABridging (Objective-C API).
     manager = nil
 
 #### Development environment
-- MacOS X 10.14.4 Mojave
-- Xcode 10.2.0
-- Swift 5.0
+- MacOS X 10.14.5 Mojave
+- Xcode 10.2.1
+- Swift 5.0.1
 
 #### License
     - The MIT License
