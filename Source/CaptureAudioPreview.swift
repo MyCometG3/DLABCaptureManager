@@ -8,6 +8,7 @@
 
 import Foundation
 import CoreMedia
+import AudioToolbox
 
 class CaptureAudioPreview: NSObject {
     /* ================================================ */
