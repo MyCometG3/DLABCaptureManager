@@ -348,18 +348,19 @@ class CaptureAudioPreview: NSObject {
             let dstCapacity = Int(aqBufferRef.pointee.mAudioDataBytesCapacity)
             let srcCount = Int(audioBufferList.mNumberBuffers)
             
-            let ptr = UnsafeMutablePointer<AudioBufferList>(&audioBufferList)
-            let ablPtr = UnsafeMutableAudioBufferListPointer.init(ptr)
-            
-            for index in 0..<srcCount {
-                let buffer :AudioBuffer = ablPtr[index]
-                let bufferSize :Int = Int(buffer.mDataByteSize)
-                if (dstCapacity - totalSize) >= bufferSize {
-                    memcpy(dst + totalSize, buffer.mData, bufferSize)
-                    totalSize += bufferSize
-                } else {
-                    status = -1
-                    break
+            withUnsafeMutablePointer(to: &audioBufferList) { (ptr) in
+                let ablPtr = UnsafeMutableAudioBufferListPointer.init(ptr)
+                
+                for index in 0..<srcCount {
+                    let buffer :AudioBuffer = ablPtr[index]
+                    let bufferSize :Int = Int(buffer.mDataByteSize)
+                    if (dstCapacity - totalSize) >= bufferSize {
+                        memcpy(dst + totalSize, buffer.mData, bufferSize)
+                        totalSize += bufferSize
+                    } else {
+                        status = -1
+                        break
+                    }
                 }
             }
             if status != 0 {
