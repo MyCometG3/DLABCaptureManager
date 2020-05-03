@@ -60,6 +60,10 @@ public class DLABCaptureManager: NSObject, DLABInputCaptureDelegate {
     /// Capture video pixelFormat (See DLABConstants.h)
     public var pixelFormat :DLABPixelFormat = .format8BitYUV
     
+    /// Override specific CoreVideoPixelFormat (with conversion)
+    /// @discussion set 0 to use Default CVPixelFormat
+    public var cvPixelFormat : OSType = 0
+    
     /// Capture video DLABVideoInputFlag (See DLABConstants.h)
     public var inputFlag :DLABVideoInputFlag = []
     
@@ -280,6 +284,11 @@ public class DLABCaptureManager: NSObject, DLABInputCaptureDelegate {
                                             vSpacing: UInt32(aspectRatio.height))
                 }
                 
+                if let vSetting = vSetting, cvPixelFormat > 0 {
+                    // rebuild formatDescription with new CVPixelFormat
+                    vSetting.cvPixelFormatType = cvPixelFormat
+                    vSetting.buildVideoFormatDescription()
+                }
                 if let vSetting = vSetting {
                     device.inputDelegate = self
                     if videoConnection.rawValue > 0 {
