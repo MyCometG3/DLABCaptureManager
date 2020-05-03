@@ -33,6 +33,9 @@ public class DLABCaptureManager: NSObject, DLABInputCaptureDelegate {
     /// Capture audio bit rate (See DLABConstants.h)
     public var audioRate :DLABAudioSampleRate = .rate48kHz
     
+    /// Audio Input Connection
+    public var audioConnection :DLABAudioConnection = .init()
+    
     /// Volume of audio preview (NOT IMPLEMENTED YET)
     public var volume :Float = 1.0 {
         didSet {
@@ -59,6 +62,9 @@ public class DLABCaptureManager: NSObject, DLABInputCaptureDelegate {
     
     /// Capture video DLABVideoInputFlag (See DLABConstants.h)
     public var inputFlag :DLABVideoInputFlag = []
+    
+    /// Video Input Connection
+    public var videoConnection :DLABVideoConnection = .init()
     
     /// Parent NSView for video preview - based on CreateCocoaScreenPreview()
     public weak var parentView :NSView? = nil {
@@ -276,8 +282,11 @@ public class DLABCaptureManager: NSObject, DLABInputCaptureDelegate {
                 
                 if let vSetting = vSetting {
                     device.inputDelegate = self
-                    try device.enableVideoInput(with: vSetting)
-                    
+                    if videoConnection.rawValue > 0 {
+                        try device.enableVideoInput(with: vSetting, on: videoConnection)
+                    } else {
+                        try device.enableVideoInput(with: vSetting)
+                    }
                     audioCaptureEnabled = false
                     if let aSetting = aSetting {
                         if let audioFormatDescription = aSetting.audioFormatDescription {
@@ -287,7 +296,11 @@ public class DLABCaptureManager: NSObject, DLABInputCaptureDelegate {
                             }
                         }
                         
-                        try device.enableAudioInput(with: aSetting)
+                        if audioConnection.rawValue > 0 {
+                            try device.enableAudioInput(with: aSetting, on: audioConnection)
+                        } else {
+                            try device.enableAudioInput(with: aSetting)
+                        }
                         
                         audioCaptureEnabled = true
                     }
