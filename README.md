@@ -26,20 +26,39 @@ NOTE: Compressed capture is not supported.
     if let manager = manager {
       guard let _ = manager.findFirstDevice() else { return }
 
-      manager.displayMode = .modeNTSC
-      manager.pixelFormat = .format8BitYUV
-      manager.videoStyle = .SD_720_486_16_9
-      manager.offset = NSSize(width:4, height:0)
-      manager.encodeProRes422 = false
+      // Capture setting
+      manager.sampleTimescale = 30000
       #if true
-          manager.encodeVideoCodecType = kCMVideoCodecType_AppleProRes422LT
-          manager.fieldDetail = kCMFormatDescriptionFieldDetail_SpatialFirstLineLate
+        // HD-1080i, fieldDominance:upper, HDMI+RCA
+        manager.displayMode = .modeHD1080i5994
+        manager.pixelFormat = .format10BitYUV
+        manager.videoStyle = .HD_1920_1080_Full
+        manager.videoConnection = .HDMI
+        manager.audioConnection = .analogRCA
+        manager.fieldDetail = kCMFormatDescriptionFieldDetail_SpatialFirstLineEarly
       #else
-          manager.encodeVideoCodecType = kCMVideoCodecType_H264
-          manager.fieldDetail = kCMFormatDescriptionFieldDetail_SpatialFirstLineLate
+        // SD-NTSC, fieldDominance:lower, sVideo+RCA
+        manager.displayMode = .modeNTSC
+        manager.pixelFormat = .format8BitYUV
+        manager.videoStyle = .SD_720_486_16_9
+        manager.offset = NSPoint(x: 4, y: 0) // clean aperture offset
+        manager.videoConnection = .sVideo
+        manager.audioConnection = .analogRCA
+        manager.fieldDetail = kCMFormatDescriptionFieldDetail_SpatialFirstLineLate
       #endif
 
+      // Convert pixelFormat of CMSampleBuffer
+      // manager.cvPixelFormat = kCVPixelFormatType_32BGRA
+
+      // Specify codec on recording
+      manager.encodeProRes422 = false
+      manager.encodeVideoCodecType = kCMVideoCodecType_AppleProRes422LT
+      // manager.encodeVideoCodecType = kCMVideoCodecType_H264
+
+      // Preview CALayer
       manager.parentView = parentView
+
+      // Start capture
       manager.captureStart()
     }
 
@@ -58,9 +77,9 @@ NOTE: Compressed capture is not supported.
     manager = nil
 
 #### Development environment
-- MacOS X 10.15.3 Catalina
-- Xcode 11.3.1
-- Swift 5.1.3
+- MacOS X 10.15.4 Catalina
+- Xcode 11.4.1
+- Swift 5.2
 
 #### License
     - The MIT License
