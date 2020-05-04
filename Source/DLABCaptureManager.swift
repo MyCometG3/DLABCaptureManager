@@ -287,7 +287,7 @@ public class DLABCaptureManager: NSObject, DLABInputCaptureDelegate {
                 if let vSetting = vSetting, cvPixelFormat > 0 {
                     // rebuild formatDescription with new CVPixelFormat
                     vSetting.cvPixelFormatType = cvPixelFormat
-                    vSetting.buildVideoFormatDescription()
+                    try vSetting.buildVideoFormatDescription()
                 }
                 if let vSetting = vSetting {
                     device.inputDelegate = self
