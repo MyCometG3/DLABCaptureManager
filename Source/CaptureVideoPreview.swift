@@ -406,8 +406,8 @@ public class CaptureVideoPreview: NSView, CALayerDelegate {
             let dim :CMVideoDimensions = CMVideoFormatDescriptionGetDimensions(fd)
             let subType :CMVideoCodecType = CMFormatDescriptionGetMediaSubType(fd)
             var ext :CFDictionary? = CMFormatDescriptionGetExtensions(fd)
-            #if false
-            if let ext1 = ext { // remove cleanaperture extension if available
+            if let ext1 = ext {
+                // remove cleanaperture extension if available
                 let clap :UnsafeRawPointer = unsafeBitCast(kCMFormatDescriptionExtension_CleanAperture,
                                                            to: UnsafeRawPointer.self)
                 if CFDictionaryContainsKey(ext1, clap) {
@@ -417,7 +417,6 @@ public class CaptureVideoPreview: NSView, CALayerDelegate {
                     ext = CFDictionaryCreateCopy(kCFAllocatorDefault, ext2)
                 }
             }
-            #endif
             CMVideoFormatDescriptionCreate(allocator: kCFAllocatorDefault,
                                            codecType: subType, width: dim.width, height: dim.height, extensions: ext,
                                            formatDescriptionOut: &fdOut)
