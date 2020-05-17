@@ -522,30 +522,7 @@ public class DLABCaptureManager: NSObject, DLABInputCaptureDelegate {
     }
     
     private func calcFPS() -> Float {
-        let mode2fps :[DLABDisplayMode:Float] = [
-            .modeHD1080p2398    :24.0/1.001,
-            .modeHD1080p24      :24.0,
-            .modePAL            :25.0,
-            .modeHD1080p25      :25.0,
-            .modeHD1080i50      :25.0,
-            .modeNTSC           :30.0/1.001,
-            .modeNTSC2398       :30.0/1.001,
-            .modeHD1080p2997    :30.0/1.001,
-            .modeHD1080i5994    :30.0/1.001,
-            .modeHD1080p30      :30.0,
-            .modeHD1080i6000    :30.0,
-            .modePALp           :50.0,
-            .modeHD720p50       :50.0,
-            .modeHD1080p50      :50.0,
-            .modeNTSCp          :60.0/1.001,
-            .modeHD720p5994     :60.0/1.001,
-            .modeHD1080p5994    :60.0/1.001,
-            .modeHD720p60       :60.0,
-            .modeHD1080p6000    :60.0,
-            // Are .mode2K... or .mode4K... required here?
-        ]
-        
-        if let fps = mode2fps[displayMode] {
+        if let fps = calcFPSFor(displayMode) {
             return fps
         }
         return 30.0
@@ -630,5 +607,146 @@ public class DLABCaptureManager: NSObject, DLABInputCaptureDelegate {
             info["videoFormatDescription"] = setting.videoFormatDescription.debugDescription // String
         }
         return info
+    }
+    
+    public func calcFPSFor(_ targetDisplayMode:DLABDisplayMode) -> Float? {
+        let mode2fps :[DLABDisplayMode:Float] = [
+            .modeNTSC           :30.0/1.001,
+            .modeNTSC2398       :30.0/1.001,
+            .modeNTSCp          :60.0/1.001,
+            .modePAL            :25.0,
+            .modePALp           :50.0,
+            
+            .modeHD720p50       :50.0,
+            .modeHD720p5994     :60.0/1.001,
+            .modeHD720p60       :60.0,
+            
+            .modeHD1080p2398    :24.0/1.001,
+            .modeHD1080p24      :24.0,
+            
+            .modeHD1080p25      :25.0,
+            .modeHD1080p2997    :30.0/1.001,
+            .modeHD1080p30      :30.0,
+            
+            .modeHD1080p4795    :48.0/1.001,
+            .modeHD1080p48      :48.0,
+            
+            .modeHD1080i50      :25.0,
+            .modeHD1080i5994    :30.0/1.001,
+            .modeHD1080i6000    :30.0,
+                        
+            .modeHD1080p50      :50.0,
+            .modeHD1080p5994    :60.0/1.001,
+            .modeHD1080p6000    :60.0,
+            
+            .modeHD1080p9590    :96.0/1.001,
+            .modeHD1080p96      :96.0,
+            .modeHD1080p100     :100.0,
+            .modeHD1080p11988   :120.0/1.001,
+            .modeHD1080p120     :120.0,
+            
+            .mode2k2398         :24.0/1.001,
+            .mode2k24           :24.0,
+            .mode2k25           :25.0,
+            
+            .mode2kDCI2398      :24.0/1.001,
+            .mode2kDCI24        :24.0,
+            .mode2kDCI25        :25.0,
+            .mode2kDCI2997      :30.0/1.001,
+            .mode2kDCI30        :30.0,
+            .mode2kDCI4795      :48.0/1.001,
+            .mode2kDCI48        :48.0,
+            .mode2kDCI50        :50.0,
+            .mode2kDCI5994      :60.0/1.001,
+            .mode2kDCI60        :60.0,
+            .mode2kDCI9590      :96.0/1.001,
+            .mode2kDCI96        :96.0,
+            .mode2kDCI100       :100.0,
+            .mode2kDCI11988     :120.0/1.001,
+            .mode2kDCI120       :120.0,
+            // TODO .mode4K... or .mode8K...
+        ]
+        
+        if let fps = mode2fps[targetDisplayMode] {
+            return fps
+        }
+        return nil
+    }
+    
+    public func displayModeList() -> [DLABDisplayMode] {
+        // limited to: NTSC, PAL, HD1080, HD720
+        // Same order as in DeckLinkAPIModes.h
+        let list:[DLABDisplayMode] = [
+            // SD Modes
+            .modeNTSC, .modeNTSC2398, .modePAL, .modeNTSCp, .modePALp,
+            // HD 1080 Modes
+            .modeHD1080p2398, .modeHD1080p24, .modeHD1080p25, .modeHD1080p2997, .modeHD1080p30,
+            .modeHD1080p4795, .modeHD1080p48, .modeHD1080p50, .modeHD1080p5994, .modeHD1080p6000,
+            .modeHD1080p9590, .modeHD1080p96, .modeHD1080p100, .modeHD1080p11988, .modeHD1080p120,
+            .modeHD1080i50, .modeHD1080i5994, .modeHD1080i6000,
+            // HD 720 Modes
+            .modeHD720p50, .modeHD720p5994, .modeHD720p60,
+            // 2k 2048x1556 Modes
+            .mode2k2398, .mode2k24, .mode2k25,
+            // 2k DCI 2048x1080 Modes
+            .mode2kDCI2398, .mode2kDCI24, .mode2kDCI25, .mode2kDCI2997, .mode2kDCI30,
+            .mode2kDCI4795, .mode2kDCI48, .mode2kDCI50, .mode2kDCI5994, .mode2kDCI60,
+            .mode2kDCI9590, .mode2kDCI96, .mode2kDCI100, .mode2kDCI11988, .mode2kDCI120,
+            // TODO .mode4K... or .mode8K...
+        ]
+        return list
+    }
+    
+    public func videoStyleListOf(_ size:NSSize) -> [VideoStyle]? {
+        var list:[VideoStyle] = [];
+        
+        // CAM 2k
+        if NSEqualSizes(size, NSSize(width: 2048, height: 1080)) {
+            list = [.CAM2k_2048_1556_Full,
+                    .CAM2k_2048_1556_239, .CAM2k_2048_1556_235,
+                    .CAM2k_2048_1556_185, .CAM2k_2048_1556_178]
+        }
+        // DCI 2k
+        if NSEqualSizes(size, NSSize(width: 2048, height: 1080)) {
+            list = [.DCI2k_2048_1080_Full,
+                    .DCI2k_2048_1080_239, .DCI2k_2048_1080_185]
+        }
+
+        // HD-1080
+        if NSEqualSizes(size, NSSize(width: 1920, height: 1080)) {
+            list = [.HD_1920_1080_Full, .HD_1920_1080_16_9]
+        }
+        if NSEqualSizes(size, NSSize(width: 1440, height: 1080)) {
+            list = [.HDV_HDCAM]
+        }
+        // HD-720
+        if NSEqualSizes(size, NSSize(width: 1280, height: 720)) {
+            list = [.HD_1280_720_Full, .HD_1280_720_16_9]
+        }
+        // SD-625/576
+        if NSEqualSizes(size, NSSize(width: 720, height: 576)) {
+            list = [.SD_720_576_16_9, .SD_720_576_4_3,
+                    .SD_625_13_5MHz_16_9, .SD_625_13_5MHz_4_3]
+        }
+        if NSEqualSizes(size, NSSize(width: 768, height: 576)) {
+            list = [.SD_768_576_Full]
+        }
+        // SD-525/486
+        if NSEqualSizes(size, NSSize(width: 720, height: 486)) {
+            list = [.SD_720_486_16_9, .SD_720_486_4_3,
+                    .SD_525_13_5MHz_16_9, .SD_525_13_5MHz_4_3]
+        }
+        if NSEqualSizes(size, NSSize(width: 640, height: 486)) {
+            list = [.SD_640_486_Full]
+        }
+        // SD-525/480
+        if NSEqualSizes(size, NSSize(width: 720, height: 480)) {
+            list = [.SD_720_480_16_9, .SD_720_480_4_3]
+        }
+        if NSEqualSizes(size, NSSize(width: 640, height: 480)) {
+            list = [.SD_640_480_Full]
+        }
+        
+        return (list.count > 0 ? list : nil)
     }
 }

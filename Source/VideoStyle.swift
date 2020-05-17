@@ -29,6 +29,16 @@ public enum VideoStyle : String {
     case SD_625_13_5MHz_16_9   = "625 13.5MHz 16:9" // clap - non square pixel
     case HDV_HDCAM          = "HDV/HDCAM"           // clap - non square pixel
     
+    case CAM2k_2048_1556_Full = "CAM2k 2048:1556 Full"  // square pixel
+    case CAM2k_2048_1556_178  = "CAM2k 2048:1556 178"   // clap - square pixel
+    case CAM2k_2048_1556_185  = "CAM2k 2048:1556 185"   // clap - square pixel
+    case CAM2k_2048_1556_235  = "CAM2k 2048:1556 235"   // clap - square pixel
+    case CAM2k_2048_1556_239  = "CAM2k 2048:1556 239"   // clap - square pixel
+    
+    case DCI2k_2048_1080_Full = "DCI2k 2048:1080 Full"  // square pixel
+    case DCI2k_2048_1080_185  = "DCI2k 2048:1080 185"   // clap - square pixel
+    case DCI2k_2048_1080_239  = "DCI2k 2048:1080 239"   // clap - square pixel
+    
     /// Get width/height parameters of encodedRect, visibleRect, and aspectRatio
     ///
     /// - Parameters:
@@ -122,6 +132,41 @@ public enum VideoStyle : String {
             encodedWidth = 1440;    encodedHeight = 1080
             visibleWidth = 1416;    visibleHeight = 1062
             aspectHorizontal = 4;   aspectVertical = 3
+            
+        case .CAM2k_2048_1556_Full: // FilmScan2k FullAperture
+            encodedWidth = 2048;    encodedHeight = 1556
+            visibleWidth = 2048;    visibleHeight = 1556
+            aspectHorizontal = 1;   aspectVertical = 1
+        case .CAM2k_2048_1556_178:  // FilmScan2k 16:9
+            encodedWidth = 2048;    encodedHeight = 1556
+            visibleWidth = 2048;    visibleHeight = (2048/16*9)
+            aspectHorizontal = 1;   aspectVertical = 1
+        case .CAM2k_2048_1556_185:  // FilmScan2k 1.85:1
+            encodedWidth = 2048;    encodedHeight = 1556
+            visibleWidth = 2048;    visibleHeight = (2048/1.85)
+            aspectHorizontal = 1;   aspectVertical = 1
+        case .CAM2k_2048_1556_235:  // FilmScan2k 2.35:1
+            encodedWidth = 2048;    encodedHeight = 1556
+            visibleWidth = 2048;    visibleHeight = (2048/2.35)
+            aspectHorizontal = 1;   aspectVertical = 1
+        case .CAM2k_2048_1556_239:  // FilmScan2k 2.39:1
+            encodedWidth = 2048;    encodedHeight = 1556
+            visibleWidth = 2048;    visibleHeight = (2048/2.39)
+            aspectHorizontal = 1;   aspectVertical = 1
+            
+        case .DCI2k_2048_1080_Full: // DCI2k FullAperture
+            encodedWidth = 2048;    encodedHeight = 1080
+            visibleWidth = 2048;    visibleHeight = 1080
+            aspectHorizontal = 1;   aspectVertical = 1
+        case .DCI2k_2048_1080_185: // DCI2k Flat 1.85:1
+            encodedWidth = 2048;    encodedHeight = 1080
+            visibleWidth = 1998;    visibleHeight = 1080
+            aspectHorizontal = 1;   aspectVertical = 1
+        case .DCI2k_2048_1080_239: // DCI2k CinemaScope 2.39:1
+            encodedWidth = 2048;    encodedHeight = 1080
+            visibleWidth = 2048;    visibleHeight = 858
+            aspectHorizontal = 1;   aspectVertical = 1
+            
         }
         
         encW = encodedWidth
