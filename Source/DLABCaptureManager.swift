@@ -390,7 +390,7 @@ public class DLABCaptureManager: NSObject, DLABInputCaptureDelegate {
                 if let writer = writer {
                     writer.movieURL = movieURL
                     writer.prefix = prefix
-                    writer.sampleTimescale = sampleTimescale
+                    writer.sampleTimescale = (sampleTimescale > 0 ? sampleTimescale : calcTimescale())
                     
                     writer.encodeAudio = encodeAudio
                     writer.encodeAudioFormatID = encodeAudioFormatID
@@ -521,11 +521,18 @@ public class DLABCaptureManager: NSObject, DLABInputCaptureDelegate {
         return currentDevice
     }
     
+    private func calcTimescale() -> CMTimeScale {
+        if let timeScale = calcTimescaleFor(displayMode) {
+            return timeScale
+        }
+        return 60000 // 30.0 * 1000
+    }
+    
     private func calcFPS() -> Float {
         if let fps = calcFPSFor(displayMode) {
             return fps
         }
-        return 30.0
+        return 60.0 //
     }
     
     private func prepTimecodeHelper() {
@@ -607,6 +614,70 @@ public class DLABCaptureManager: NSObject, DLABInputCaptureDelegate {
             info["videoFormatDescription"] = setting.videoFormatDescription.debugDescription // String
         }
         return info
+    }
+    
+    public func calcTimescaleFor(_ targetDisplayMode:DLABDisplayMode) -> CMTimeScale? {
+        let mode2scale :[DLABDisplayMode:CMTimeScale] = [
+            .modeNTSC           :30000,
+            .modeNTSC2398       :24000,
+            .modeNTSCp          :60000,
+            .modePAL            :25000,
+            .modePALp           :50000,
+            
+            .modeHD720p50       :50000,
+            .modeHD720p5994     :60000,
+            .modeHD720p60       :60000,
+            
+            .modeHD1080p2398    :24000,
+            .modeHD1080p24      :24000,
+            
+            .modeHD1080p25      :25000,
+            .modeHD1080p2997    :30000,
+            .modeHD1080p30      :30000,
+            
+            .modeHD1080p4795    :48000,
+            .modeHD1080p48      :48000,
+            
+            .modeHD1080i50      :25000,
+            .modeHD1080i5994    :30000,
+            .modeHD1080i6000    :30000,
+                        
+            .modeHD1080p50      :50000,
+            .modeHD1080p5994    :60000,
+            .modeHD1080p6000    :60000,
+            
+            .modeHD1080p9590    :96000,
+            .modeHD1080p96      :96000,
+            .modeHD1080p100     :100000,
+            .modeHD1080p11988   :120000,
+            .modeHD1080p120     :120000,
+            
+            .mode2k2398         :24000,
+            .mode2k24           :24000,
+            .mode2k25           :25000,
+            
+            .mode2kDCI2398      :24000,
+            .mode2kDCI24        :24000,
+            .mode2kDCI25        :25000,
+            .mode2kDCI2997      :30000,
+            .mode2kDCI30        :30000,
+            .mode2kDCI4795      :48000,
+            .mode2kDCI48        :48000,
+            .mode2kDCI50        :50000,
+            .mode2kDCI5994      :60000,
+            .mode2kDCI60        :60000,
+            .mode2kDCI9590      :96000,
+            .mode2kDCI96        :96000,
+            .mode2kDCI100       :100000,
+            .mode2kDCI11988     :120000,
+            .mode2kDCI120       :120000,
+            // TODO .mode4K... or .mode8K...
+        ]
+        
+        if let timeScale = mode2scale[targetDisplayMode] {
+            return timeScale
+        }
+        return nil
     }
     
     public func calcFPSFor(_ targetDisplayMode:DLABDisplayMode) -> Float? {
