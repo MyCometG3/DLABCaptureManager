@@ -568,12 +568,18 @@ public class DLABCaptureManager: NSObject, DLABInputCaptureDelegate {
             info["modelName"] = device.modelName // NSString* -> String
             info["displayName"] = device.displayName // NSString* -> String
             info["persistentID"] = device.persistentID // int64_t -> Int64
+            info["deviceGroupID"] = device.deviceGroupID // int64_t -> Int64
             info["topologicalID"] = device.topologicalID // int64_t -> Int64
+            info["numberOfSubDevices"] = device.numberOfSubDevices // int64_t -> Int64
+            info["subDeviceIndex"] = device.subDeviceIndex // int64_t -> Int64
+            info["profileID"] = device.profileID // int64_t -> Int64
+            info["duplex"] = device.duplex // int64_t -> Int64
             info["supportFlag"] = device.supportFlag // uint32_t -> UInt32
             info["supportCapture"] = device.supportCapture // BOOL
             info["supportPlayback"] = device.supportPlayback // BOOL
             info["supportKeying"] = device.supportKeying // BOOL
             info["supportInputFormatDetection"] = device.supportInputFormatDetection // BOOL
+            info["supportHDRMetadata"] = device.supportHDRMetadata // BOOL
         }
         return info
     }
