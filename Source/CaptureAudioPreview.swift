@@ -16,7 +16,7 @@ class CaptureAudioPreview: NSObject {
     /* ================================================ */
     
     /// AudioQueueBuffer count to be available
-    private let kNumberBuffer = 3
+    private let kNumberBuffer = 5
     /// AudioQueueBuffer count to be queued
     private var numEnqueued :Int = 0
     /// AudioQueueBuffer time resolution (per second)
