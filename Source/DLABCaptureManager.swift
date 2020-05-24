@@ -224,9 +224,10 @@ public class DLABCaptureManager: NSObject, DLABInputCaptureDelegate {
     }
     
     /* ============================================ */
-    // MARK: - private method
+    // MARK: - public method
     /* ============================================ */
     
+    /// Start Capture session
     public func captureStart() {
         if currentDevice == nil {
             _ = findFirstDevice()
@@ -324,6 +325,7 @@ public class DLABCaptureManager: NSObject, DLABInputCaptureDelegate {
         }
     }
     
+    /// Stop capture session
     public func captureStop() {
         if let device = currentDevice {
             do {
@@ -363,6 +365,7 @@ public class DLABCaptureManager: NSObject, DLABInputCaptureDelegate {
         }
     }
     
+    /// Toggle recording using current session
     public func recordToggle() {
         if running {
             if let writer = writer {
@@ -432,9 +435,41 @@ public class DLABCaptureManager: NSObject, DLABInputCaptureDelegate {
     }
     
     /* ============================================ */
+    // MARK: - private method
+    /* ============================================ */
+    
+    private func calcTimescale() -> CMTimeScale {
+        if let timeScale = nativeTimescaleFor(displayMode) {
+            return timeScale
+        }
+        return 60000 // 30.0 * 1000
+    }
+    
+    private func calcFPS() -> Float {
+        if let fps = nativeFPSFor(displayMode) {
+            return fps
+        }
+        return 60.0 //
+    }
+    
+    private func prepTimecodeHelper() {
+        if supportTimecodeCoreAudio {
+            if let timecodeHelper = timecodeHelper {
+                timecodeHelper.timeCodeFormatType = timecodeFormatType
+            } else {
+                timecodeHelper = CaptureTimecodeHelper(formatType: timecodeFormatType)
+            }
+        }
+    }
+    
+    /* ============================================ */
     // MARK: - callback
     /* ============================================ */
     
+    /// Callback method implementation - DLABInputCaptureDelegate
+    /// - Parameters:
+    ///   - sampleBuffer: CMSampleBuffer
+    ///   - sender: DLABDevice
     public func processCapturedAudioSample(_ sampleBuffer: CMSampleBuffer,
                                            of sender:DLABDevice) {
         if let writer = writer {
@@ -451,6 +486,10 @@ public class DLABCaptureManager: NSObject, DLABInputCaptureDelegate {
         }
     }
     
+    /// Callback method implementation - DLABInputCaptureDelegate
+    /// - Parameters:
+    ///   - sampleBuffer: CMSampleBuffer
+    ///   - sender: DLABDevice
     public func processCapturedVideoSample(_ sampleBuffer: CMSampleBuffer,
                                            of sender:DLABDevice) {
         if let writer = writer {
@@ -478,6 +517,11 @@ public class DLABCaptureManager: NSObject, DLABInputCaptureDelegate {
         }
     }
     
+    /// Callback method implementation - DLABInputCaptureDelegate
+    /// - Parameters:
+    ///   - sampleBuffer: CMSampleBuffer
+    ///   - setting: DLABTimecodeSetting
+    ///   - sender: DLABDevice
     public func processCapturedVideoSample(_ sampleBuffer: CMSampleBuffer,
                                            timecodeSetting setting: DLABTimecodeSetting,
                                            of sender:DLABDevice) {
@@ -508,9 +552,11 @@ public class DLABCaptureManager: NSObject, DLABInputCaptureDelegate {
     }
     
     /* ============================================ */
-    // MARK: - utility
+    // MARK: - public utility
     /* ============================================ */
     
+    /// Select first DeckLink Device for Capture
+    /// - Returns: DLABDevice
     public func findFirstDevice() -> DLABDevice? {
         if currentDevice == nil {
             let deviceArray = deviceList()
@@ -521,30 +567,8 @@ public class DLABCaptureManager: NSObject, DLABInputCaptureDelegate {
         return currentDevice
     }
     
-    private func calcTimescale() -> CMTimeScale {
-        if let timeScale = calcTimescaleFor(displayMode) {
-            return timeScale
-        }
-        return 60000 // 30.0 * 1000
-    }
-    
-    private func calcFPS() -> Float {
-        if let fps = calcFPSFor(displayMode) {
-            return fps
-        }
-        return 60.0 //
-    }
-    
-    private func prepTimecodeHelper() {
-        if supportTimecodeCoreAudio {
-            if let timecodeHelper = timecodeHelper {
-                timecodeHelper.timeCodeFormatType = timecodeFormatType
-            } else {
-                timecodeHelper = CaptureTimecodeHelper(formatType: timecodeFormatType)
-            }
-        }
-    }
-    
+    /// Detected DeckLink Devices
+    /// - Returns: Array of DLABDevice
     public func deviceList() -> [DLABDevice]? {
         let browser = DLABBrowser()
         _ = browser.registerDevicesForInput()
@@ -552,16 +576,25 @@ public class DLABCaptureManager: NSObject, DLABInputCaptureDelegate {
         return devciceList
     }
     
+    /// Supported Input VideoSettings for DLABDevice
+    /// - Parameter device: DLABDevice
+    /// - Returns: Array of DLABVideoSetting
     public func inputVideoSettingList(device :DLABDevice) -> [DLABVideoSetting]? {
         let settingList = device.inputVideoSettingArray
         return settingList
     }
     
+    /// Supported Output VideoSettings for DLABDevice
+    /// - Parameter device: DLABDevice
+    /// - Returns: Array of DLABVideoSetting
     public func outputVideoSettingList(device :DLABDevice) -> [DLABVideoSetting]? {
         let settingList = device.outputVideoSettingArray
         return settingList
     }
     
+    /// Dictionary of DLABDeviceInfo
+    /// - Parameter device: DLABDevice
+    /// - Returns: Dictionary
     public func deviceInfo(device :DLABDevice) -> [String:Any] {
         var info :[String:Any] = [:]
         do {
@@ -584,6 +617,9 @@ public class DLABCaptureManager: NSObject, DLABInputCaptureDelegate {
         return info
     }
     
+    /// Dictionary of AudioSettingInfo
+    /// - Parameter setting: DLABAudioSetting
+    /// - Returns: Dictionary
     public func audioSettingInfo(setting :DLABAudioSetting) -> [String:Any] {
         var info :[String:Any] = [:]
         do {
@@ -597,6 +633,9 @@ public class DLABCaptureManager: NSObject, DLABInputCaptureDelegate {
         return info
     }
     
+    /// Dictionary of VideoSettingInfo
+    /// - Parameter setting: DLABVideoSetting
+    /// - Returns: Dictionary
     public func videoSettingInfo(setting :DLABVideoSetting) -> [String:Any] {
         var info :[String:Any] = [:]
         do {
@@ -622,7 +661,10 @@ public class DLABCaptureManager: NSObject, DLABInputCaptureDelegate {
         return info
     }
     
-    public func calcTimescaleFor(_ targetDisplayMode:DLABDisplayMode) -> CMTimeScale? {
+    /// Native Timescale for DisplayMode
+    /// - Parameter targetDisplayMode: DLABDisplayMode
+    /// - Returns: CMTimeScale
+    public func nativeTimescaleFor(_ targetDisplayMode:DLABDisplayMode) -> CMTimeScale? {
         let mode2scale :[DLABDisplayMode:CMTimeScale] = [
             .modeNTSC           :30000,
             .modeNTSC2398       :24000,
@@ -686,7 +728,10 @@ public class DLABCaptureManager: NSObject, DLABInputCaptureDelegate {
         return nil
     }
     
-    public func calcFPSFor(_ targetDisplayMode:DLABDisplayMode) -> Float? {
+    /// Native video frame rate for DisplayMode
+    /// - Parameter targetDisplayMode: DLABDisplayMode
+    /// - Returns: FPS in Float
+    public func nativeFPSFor(_ targetDisplayMode:DLABDisplayMode) -> Float? {
         let mode2fps :[DLABDisplayMode:Float] = [
             .modeNTSC           :30.0/1.001,
             .modeNTSC2398       :30.0/1.001,
@@ -750,6 +795,8 @@ public class DLABCaptureManager: NSObject, DLABInputCaptureDelegate {
         return nil
     }
     
+    /// Supported DLABDisplayMode list
+    /// - Returns:array of DLABDisplayMode
     public func displayModeList() -> [DLABDisplayMode] {
         // limited to: NTSC, PAL, HD1080, HD720
         // Same order as in DeckLinkAPIModes.h
@@ -774,6 +821,9 @@ public class DLABCaptureManager: NSObject, DLABInputCaptureDelegate {
         return list
     }
     
+    /// Supported VideoStyle for pixelSize
+    /// - Parameter size: NSSize
+    /// - Returns: array of VideoStyle
     public func videoStyleListOf(_ size:NSSize) -> [VideoStyle]? {
         var list:[VideoStyle] = [];
         
