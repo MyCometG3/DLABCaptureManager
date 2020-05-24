@@ -428,12 +428,12 @@ public class CaptureVideoPreview: NSView, CALayerDelegate {
             let width :Int = CVPixelBufferGetWidth(pb)
             let height :Int = CVPixelBufferGetHeight(pb)
             let format :OSType = CVPixelBufferGetPixelFormatType(pb)
-            let stride :Int = CVPixelBufferGetBytesPerRow(pb)
+            let alignment :Int = 16 // = 2^4 = 2 * sizeof(void*)
             let dict = [
                 kCVPixelBufferPixelFormatTypeKey: NSFileTypeForHFSTypeCode(format) as CFString,
                 kCVPixelBufferWidthKey: width as CFNumber,
                 kCVPixelBufferHeightKey: height as CFNumber,
-                kCVPixelBufferBytesPerRowAlignmentKey: stride as CFNumber
+                kCVPixelBufferBytesPerRowAlignmentKey: alignment as CFNumber
             ] as CFDictionary
             CVPixelBufferCreate(kCFAllocatorDefault, width, height, format, dict, &pbOut)
             
