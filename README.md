@@ -78,7 +78,7 @@ NOTE: Compressed capture is not supported.
 
 #### Development environment
 - MacOS X 10.15.4 Catalina
-- Xcode 11.4.1
+- Xcode 11.5
 - Swift 5.2
 
 #### License
