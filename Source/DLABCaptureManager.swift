@@ -913,7 +913,7 @@ public class DLABCaptureManager: NSObject, DLABInputCaptureDelegate {
         }
         
         // CAM 2k
-        if NSEqualSizes(size, NSSize(width: 2048, height: 1080)) {
+        if NSEqualSizes(size, NSSize(width: 2048, height: 1556)) {
             list = [.CAM2k_2048_1556_Full,
                     .CAM2k_2048_1556_239, .CAM2k_2048_1556_235,
                     .CAM2k_2048_1556_185, .CAM2k_2048_1556_178]
