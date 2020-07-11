@@ -39,6 +39,12 @@ public enum VideoStyle : String {
     case DCI2k_2048_1080_185  = "DCI2k 2048:1080 185"   // clap - square pixel
     case DCI2k_2048_1080_239  = "DCI2k 2048:1080 239"   // clap - square pixel
     
+    case UHD4k_3840_2160_Full  = "UHD4k 3840:2160 Full"   // square pixel
+
+    case DCI4k_4096_2160_Full = "DCI4k 4096:2160 Full"  // square pixel
+    case DCI4k_4096_2160_185  = "DCI4k 4096:2160 185"   // clap - square pixel
+    case DCI4k_4096_2160_239  = "DCI4k 4096:2160 239"   // clap - square pixel
+
     /// Get width/height parameters of encodedRect, visibleRect, and aspectRatio
     ///
     /// - Parameters:
@@ -167,6 +173,24 @@ public enum VideoStyle : String {
             visibleWidth = 2048;    visibleHeight = 858
             aspectHorizontal = 1;   aspectVertical = 1
             
+        case .UHD4k_3840_2160_Full: // 4K UHD FullAperture
+            encodedWidth = 3840;    encodedHeight = 2160
+            visibleWidth = 3840;    visibleHeight = 2160
+            aspectHorizontal = 1;   aspectVertical = 1
+            
+        case .DCI4k_4096_2160_Full: // DCI4k FullAperture
+            encodedWidth = 4096;    encodedHeight = 2160
+            visibleWidth = 4096;    visibleHeight = 2160
+            aspectHorizontal = 1;   aspectVertical = 1
+        case .DCI4k_4096_2160_185: // DCI4k Flat 1.85:1
+            encodedWidth = 4096;    encodedHeight = 2160
+            visibleWidth = 3996;    visibleHeight = 2160
+            aspectHorizontal = 1;   aspectVertical = 1
+        case .DCI4k_4096_2160_239: // DCI4k CinemaScope 2.39:1
+            encodedWidth = 4096;    encodedHeight = 2160
+            visibleWidth = 4096;    visibleHeight = 1716
+            aspectHorizontal = 1;   aspectVertical = 1
+            
         }
         
         encW = encodedWidth
@@ -245,7 +269,7 @@ public enum VideoStyle : String {
                 AVVideoTransferFunctionKey : AVVideoTransferFunction_ITU_R_709_2,
                 AVVideoYCbCrMatrixKey : AVVideoYCbCrMatrix_ITU_R_601_4
             ]
-        } else {
+        } else if encodedHeight <= 1125 {
             // HD (Rec. 709)
             //   1920x1080 HDTV (SMPTE 274M-1995)
             //   1280x720 HDTV (SMPTE 296M-1997)
@@ -254,6 +278,22 @@ public enum VideoStyle : String {
                 AVVideoTransferFunctionKey : AVVideoTransferFunction_ITU_R_709_2,
                 AVVideoYCbCrMatrixKey : AVVideoYCbCrMatrix_ITU_R_709_2
             ]
+        } else {
+            // UHD (Rec. 2020)
+            //   3840x2160 UHDTV (Rec. ITU-R BT. 2020)
+            videoOutputSettings[AVVideoColorPropertiesKey] = [
+                AVVideoColorPrimariesKey : kCVImageBufferColorPrimaries_ITU_R_2020,
+                AVVideoTransferFunctionKey : kCVImageBufferTransferFunction_ITU_R_709_2,
+                AVVideoYCbCrMatrixKey : kCVImageBufferYCbCrMatrix_ITU_R_2020
+            ]
+            // NOTE: Following params requires 10.13 so I use kCVImageBuffer* instead
+            //if #available(OSX 10.13, *) {
+            //    videoOutputSettings[AVVideoColorPropertiesKey] = [
+            //        AVVideoColorPrimariesKey : AVVideoColorPrimaries_ITU_R_2020,
+            //        AVVideoTransferFunctionKey : AVVideoTransferFunction_ITU_R_709_2,
+            //        AVVideoYCbCrMatrixKey : AVVideoYCbCrMatrix_ITU_R_2020
+            //    ]
+            //}
         }
         
         /*

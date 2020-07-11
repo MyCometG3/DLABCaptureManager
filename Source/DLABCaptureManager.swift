@@ -719,7 +719,40 @@ public class DLABCaptureManager: NSObject, DLABInputCaptureDelegate {
             .mode2kDCI100       :100000,
             .mode2kDCI11988     :120000,
             .mode2kDCI120       :120000,
-            // TODO .mode4K... or .mode8K...
+            
+            .mode4K2160p2398    :24000,
+            .mode4K2160p24      :24000,
+            .mode4K2160p25      :25000,
+            .mode4K2160p2997    :30000,
+            .mode4K2160p30      :30000,
+            .mode4K2160p4795    :48000,
+            .mode4K2160p48      :48000,
+            .mode4K2160p50      :50000,
+            .mode4K2160p5994    :60000,
+            .mode4K2160p60      :60000,
+            .mode4K2160p9590    :96000,
+            .mode4K2160p96      :96000,
+            .mode4K2160p100     :100000,
+            .mode4K2160p11988   :120000,
+            .mode4K2160p120     :120000,
+            
+            .mode4kDCI2398      :24000,
+            .mode4kDCI24        :24000,
+            .mode4kDCI25        :25000,
+            .mode4kDCI2997      :30000,
+            .mode4kDCI30        :30000,
+            .mode4kDCI4795      :48000,
+            .mode4kDCI48        :48000,
+            .mode4kDCI50        :50000,
+            .mode4kDCI5994      :60000,
+            .mode4kDCI60        :60000,
+            .mode4kDCI9590      :96000,
+            .mode4kDCI96        :96000,
+            .mode4kDCI100       :100000,
+            .mode4kDCI11988     :120000,
+            .mode4kDCI120       :120000,
+            
+            // TODO .mode8K...
         ]
         
         if let timeScale = mode2scale[targetDisplayMode] {
@@ -786,7 +819,40 @@ public class DLABCaptureManager: NSObject, DLABInputCaptureDelegate {
             .mode2kDCI100       :100.0,
             .mode2kDCI11988     :120.0/1.001,
             .mode2kDCI120       :120.0,
-            // TODO .mode4K... or .mode8K...
+            
+            .mode4K2160p2398    :24.0/1.001,
+            .mode4K2160p24      :24.0,
+            .mode4K2160p25      :25.0,
+            .mode4K2160p2997    :30.0/1.001,
+            .mode4K2160p30      :30.0,
+            .mode4K2160p4795    :48.0/1.001,
+            .mode4K2160p48      :48.0,
+            .mode4K2160p50      :50.0,
+            .mode4K2160p5994    :60.0/1.001,
+            .mode4K2160p60      :60.0,
+            .mode4K2160p9590    :96.0/1.001,
+            .mode4K2160p96      :96.0,
+            .mode4K2160p100     :100.0,
+            .mode4K2160p11988   :120.0/1.001,
+            .mode4K2160p120     :120.0,
+            
+            .mode4kDCI2398      :24.0/1.001,
+            .mode4kDCI24        :24.0,
+            .mode4kDCI25        :25.0,
+            .mode4kDCI2997      :30.0/1.001,
+            .mode4kDCI30        :30.0,
+            .mode4kDCI4795      :48.0/1.001,
+            .mode4kDCI48        :48.0,
+            .mode4kDCI50        :50.0,
+            .mode4kDCI5994      :60.0/1.001,
+            .mode4kDCI60        :60.0,
+            .mode4kDCI9590      :96.0/1.001,
+            .mode4kDCI96        :96.0,
+            .mode4kDCI100       :100.0,
+            .mode4kDCI11988     :120.0/1.001,
+            .mode4kDCI120       :120.0,
+            
+            // TODO .mode8K...
         ]
         
         if let fps = mode2fps[targetDisplayMode] {
@@ -816,7 +882,15 @@ public class DLABCaptureManager: NSObject, DLABInputCaptureDelegate {
             .mode2kDCI2398, .mode2kDCI24, .mode2kDCI25, .mode2kDCI2997, .mode2kDCI30,
             .mode2kDCI4795, .mode2kDCI48, .mode2kDCI50, .mode2kDCI5994, .mode2kDCI60,
             .mode2kDCI9590, .mode2kDCI96, .mode2kDCI100, .mode2kDCI11988, .mode2kDCI120,
-            // TODO .mode4K... or .mode8K...
+            // 4k UHD 3840x2160 Modes
+            .mode4K2160p2398, .mode4K2160p24, .mode4K2160p25, .mode4K2160p2997, .mode4K2160p30,
+            .mode4K2160p4795, .mode4K2160p48, .mode4K2160p50, .mode4K2160p5994, .mode4K2160p60,
+            .mode4K2160p9590, .mode4K2160p96, .mode4K2160p100, .mode4K2160p11988, .mode4K2160p120,
+            // 4k DCI 4096x2160 Modes
+            .mode4kDCI2398, .mode4kDCI24, .mode4kDCI25, .mode4kDCI2997, .mode4kDCI30,
+            .mode4kDCI4795, .mode4kDCI48, .mode4kDCI50, .mode4kDCI5994, .mode4kDCI60,
+            .mode4kDCI9590, .mode4kDCI96, .mode4kDCI100, .mode4kDCI11988, .mode4kDCI120,
+            // TODO .mode8K...
         ]
         return list
     }
@@ -826,6 +900,17 @@ public class DLABCaptureManager: NSObject, DLABInputCaptureDelegate {
     /// - Returns: array of VideoStyle
     public func videoStyleListOf(_ size:NSSize) -> [VideoStyle]? {
         var list:[VideoStyle] = [];
+        
+        // DCI 4k
+        if NSEqualSizes(size, NSSize(width: 4096, height: 2160)) {
+            list = [.DCI4k_4096_2160_Full,
+                    .DCI4k_4096_2160_239, .DCI4k_4096_2160_185]
+        }
+
+        // UHD 4k
+        if NSEqualSizes(size, NSSize(width: 3840, height: 2160)) {
+            list = [.UHD4k_3840_2160_Full]
+        }
         
         // CAM 2k
         if NSEqualSizes(size, NSSize(width: 2048, height: 1080)) {
