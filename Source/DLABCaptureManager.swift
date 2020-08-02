@@ -36,7 +36,7 @@ public class DLABCaptureManager: NSObject, DLABInputCaptureDelegate {
     /// Audio Input Connection
     public var audioConnection :DLABAudioConnection = .init()
     
-    /// Volume of audio preview (NOT IMPLEMENTED YET)
+    /// Volume of audio preview
     public var volume :Float = 1.0 {
         didSet {
             volume = max(0.0, min(1.0, volume))
@@ -49,6 +49,9 @@ public class DLABCaptureManager: NSObject, DLABInputCaptureDelegate {
     
     /// True while audio capture is enabled
     private var audioCaptureEnabled :Bool = false
+    
+    /// AudioPreview object
+    private var audioPreview :CaptureAudioPreview? = nil
     
     /* ============================================ */
     // MARK: - properties - Capturing video
@@ -88,9 +91,6 @@ public class DLABCaptureManager: NSObject, DLABInputCaptureDelegate {
     
     /// Set CaptureVideoPreview view here - based on AVSampleBufferDisplayLayer
     public weak var videoPreview :CaptureVideoPreview? = nil
-    
-    /// AudioPreview object
-    private var audioPreview :CaptureAudioPreview? = nil
     
     /* ============================================ */
     // MARK: - properties - Recording
@@ -139,7 +139,7 @@ public class DLABCaptureManager: NSObject, DLABInputCaptureDelegate {
     
     /// Optional: customise audio encode settings of AVAssetWriterInput.
     public var updateAudioSettings : (([String:Any]) -> [String:Any])? = nil
-
+    
     /* ============================================ */
     // MARK: - properties - Recording video
     /* ============================================ */
@@ -161,7 +161,7 @@ public class DLABCaptureManager: NSObject, DLABInputCaptureDelegate {
     
     /// ReadOnly encoded size of videoStyle.
     public private(set) var encodedSize = NSSize(width: 720, height: 486)
-
+    
     /// ReadOnly clean-aperture size of videoStyle.
     public private(set) var visibleSize = NSSize(width: 704, height: 480)
     
@@ -187,7 +187,7 @@ public class DLABCaptureManager: NSObject, DLABInputCaptureDelegate {
     
     /// Optional: customise video encode settings of AVAssetWriterInput.
     public var updateVideoSettings : (([String:Any]) -> [String:Any])? = nil
-
+    
     /* ============================================ */
     // MARK: - properties - Recording timecode
     /* ============================================ */
@@ -642,7 +642,7 @@ public class DLABCaptureManager: NSObject, DLABInputCaptureDelegate {
             info["name"] = setting.name // NSString* -> String
             info["width"] = setting.width // long -> int64_t -> Int64
             info["height"] = setting.height // long -> int64_t -> Int64
-        
+            
             info["duration"] = setting.duration // int64_t -> Int64
             info["timeScale"] = setting.timeScale // int64_t -> Int64
             info["displayMode"] = NSFileTypeForHFSTypeCode(setting.displayMode.rawValue) // Sting
@@ -657,6 +657,9 @@ public class DLABCaptureManager: NSObject, DLABInputCaptureDelegate {
             info["outputFlag"] = setting.outputFlag.rawValue // uint32_t -> UInt32
             info["rowBytes"] = setting.rowBytes // long -> int64_t -> Int64
             info["videoFormatDescription"] = setting.videoFormatDescription.debugDescription // String
+            
+            info["cvPixelFormatType"] = setting.cvPixelFormatType; // UInt32
+            info["cvRowBytes"]  = setting.cvRowBytes; // size_t -> Int -> Int64
         }
         return info
     }
@@ -689,7 +692,7 @@ public class DLABCaptureManager: NSObject, DLABInputCaptureDelegate {
             .modeHD1080i50      :25000,
             .modeHD1080i5994    :30000,
             .modeHD1080i6000    :30000,
-                        
+            
             .modeHD1080p50      :50000,
             .modeHD1080p5994    :60000,
             .modeHD1080p6000    :60000,
@@ -789,7 +792,7 @@ public class DLABCaptureManager: NSObject, DLABInputCaptureDelegate {
             .modeHD1080i50      :25.0,
             .modeHD1080i5994    :30.0/1.001,
             .modeHD1080i6000    :30.0,
-                        
+            
             .modeHD1080p50      :50.0,
             .modeHD1080p5994    :60.0/1.001,
             .modeHD1080p6000    :60.0,
@@ -906,7 +909,7 @@ public class DLABCaptureManager: NSObject, DLABInputCaptureDelegate {
             list = [.DCI4k_4096_2160_Full,
                     .DCI4k_4096_2160_239, .DCI4k_4096_2160_185]
         }
-
+        
         // UHD 4k
         if NSEqualSizes(size, NSSize(width: 3840, height: 2160)) {
             list = [.UHD4k_3840_2160_Full]
@@ -923,7 +926,7 @@ public class DLABCaptureManager: NSObject, DLABInputCaptureDelegate {
             list = [.DCI2k_2048_1080_Full,
                     .DCI2k_2048_1080_239, .DCI2k_2048_1080_185]
         }
-
+        
         // HD-1080
         if NSEqualSizes(size, NSSize(width: 1920, height: 1080)) {
             list = [.HD_1920_1080_Full, .HD_1920_1080_16_9]

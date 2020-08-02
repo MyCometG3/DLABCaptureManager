@@ -154,7 +154,7 @@ class CaptureAudioPreview: NSObject {
         }
         
         // Start AudioQueue instantly
-        self.queueAsync {
+        queueAsync {
             try? self.aqPrime()
             try? self.aqStart()
         }
@@ -176,7 +176,7 @@ class CaptureAudioPreview: NSObject {
     ///
     /// - Parameter block: block to process
     private func queueSync(_ block :(()->Void)) {
-        guard let queue = self.processingQueue else { return }
+        guard let queue = processingQueue else { return }
         
         if nil != DispatchQueue.getSpecific(key: processingQueueSpecificKey) {
             block()
@@ -189,7 +189,7 @@ class CaptureAudioPreview: NSObject {
     ///
     /// - Parameter block: block to process
     private func queueAsync(_ block :@escaping ()->Void) {
-        guard let queue = self.processingQueue else { return }
+        guard let queue = processingQueue else { return }
         
         if nil != DispatchQueue.getSpecific(key: processingQueueSpecificKey) {
             queue.async(execute: block)
@@ -255,7 +255,7 @@ class CaptureAudioPreview: NSObject {
             count = numEnqueued + 1
             assert(count <= kNumberBuffer, "ERROR: Enqueued Counter value error.")
             numEnqueued = count
-
+            
             if show {
                 print("count == \(count)")
             }
@@ -284,7 +284,7 @@ class CaptureAudioPreview: NSObject {
                 // queueing
                 aqBufRef.pointee.mAudioDataByteSize = UInt32(delayBytes)
                 _ = AudioQueueEnqueueBuffer(audioQueue, aqBufRef, 0, nil)
-                _ = self.numEnqueuedCountInc(false)
+                _ = numEnqueuedCountInc(false)
                 
                 // print("enqueueDelay()")
             }
@@ -326,7 +326,7 @@ class CaptureAudioPreview: NSObject {
             var bufferListSizeNeededOut :Int = 0
             let sizeOfAudioBufferList = Int(MemoryLayout<AudioBufferList>.size)
             let alignmentFlag = kCMSampleBufferFlag_AudioBufferList_Assure16ByteAlignment
-
+            
             status = CMSampleBufferGetAudioBufferListWithRetainedBlockBuffer(sampleBuffer,
                                                                              bufferListSizeNeededOut: &bufferListSizeNeededOut,
                                                                              bufferListOut: &audioBufferList,
@@ -431,9 +431,9 @@ class CaptureAudioPreview: NSObject {
         var status :OSStatus = -1
         var errDescription :String? = nil
         var errReason :String? = nil
-
+        
         queueSync {
-            if let audioQueue = audioQueue {
+            if let audioQueue = self.audioQueue {
                 // Stop AudioQueue first
                 try? aqStop()
                 
@@ -470,9 +470,9 @@ class CaptureAudioPreview: NSObject {
         var status :OSStatus = -1
         var errDescription :String? = nil
         var errReason :String? = nil
-
+        
         queueSync {
-            if let audioQueue = audioQueue, self.running == false {
+            if let audioQueue = audioQueue, running == false {
                 status = AudioQueuePrime(audioQueue, 0, nil)
             }
         }
@@ -489,12 +489,12 @@ class CaptureAudioPreview: NSObject {
         var status :OSStatus = -1
         var errDescription :String? = nil
         var errReason :String? = nil
-
+        
         queueSync {
-            if let audioQueue = audioQueue, self.running == false {
+            if let audioQueue = audioQueue, running == false {
                 status = AudioQueueStart(audioQueue, nil)
-
-                self.running = (status == 0) ? true : false
+                
+                running = (status == 0) ? true : false
             }
         }
         
@@ -510,9 +510,9 @@ class CaptureAudioPreview: NSObject {
         var status :OSStatus = -1
         var errDescription :String? = nil
         var errReason :String? = nil
-
+        
         queueSync {
-            if let audioQueue = audioQueue, self.running == true {
+            if let audioQueue = audioQueue, running == true {
                 status = AudioQueueFlush(audioQueue)
             }
         }
@@ -529,12 +529,12 @@ class CaptureAudioPreview: NSObject {
         var status :OSStatus = -1
         var errDescription :String? = nil
         var errReason :String? = nil
-
+        
         queueSync {
-            if let audioQueue = audioQueue { // , self.running == true
+            if let audioQueue = audioQueue { // , running == true
                 status = AudioQueueStop(audioQueue, true)
                 
-                self.running = (status == 0) ? false : true
+                running = (status == 0) ? false : true
             }
         }
         
@@ -550,9 +550,9 @@ class CaptureAudioPreview: NSObject {
         var status :OSStatus = -1
         var errDescription :String? = nil
         var errReason :String? = nil
-
+        
         queueSync {
-            if let audioQueue = audioQueue, self.running == true {
+            if let audioQueue = audioQueue, running == true {
                 status = AudioQueuePause(audioQueue)
             }
         }
@@ -569,7 +569,7 @@ class CaptureAudioPreview: NSObject {
         var status :OSStatus = -1
         var errDescription :String? = nil
         var errReason :String? = nil
-
+        
         queueSync {
             if let audioQueue = audioQueue {
                 status = AudioQueueReset(audioQueue)

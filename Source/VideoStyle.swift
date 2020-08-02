@@ -40,11 +40,11 @@ public enum VideoStyle : String {
     case DCI2k_2048_1080_239  = "DCI2k 2048:1080 239"   // clap - square pixel
     
     case UHD4k_3840_2160_Full  = "UHD4k 3840:2160 Full"   // square pixel
-
+    
     case DCI4k_4096_2160_Full = "DCI4k 4096:2160 Full"  // square pixel
     case DCI4k_4096_2160_185  = "DCI4k 4096:2160 185"   // clap - square pixel
     case DCI4k_4096_2160_239  = "DCI4k 4096:2160 239"   // clap - square pixel
-
+    
     /// Get width/height parameters of encodedRect, visibleRect, and aspectRatio
     ///
     /// - Parameters:
@@ -211,7 +211,7 @@ public enum VideoStyle : String {
     public func settings(
         hOffset horizontalOffset: Int,
         vOffset verticalOffset: Int
-        ) -> [String: Any] {
+    ) -> [String: Any] {
         
         // clap/pasp => Technical Note TN2162
         // Uncompressed Y´CbCr Video in QuickTime Files
@@ -227,7 +227,7 @@ public enum VideoStyle : String {
               aspectH: &aspectHorizontal, aspectV: &aspectVertical)
         
         var videoOutputSettings: [String:Any] = [:]
-
+        
         videoOutputSettings[AVVideoWidthKey] = encodedWidth
         videoOutputSettings[AVVideoHeightKey] = encodedHeight
         

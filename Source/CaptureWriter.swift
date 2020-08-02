@@ -140,7 +140,7 @@ class CaptureWriter: NSObject {
             }
             
             isRecording = false
-            self.queue = nil
+            queue = nil
         }
     }
     
@@ -208,10 +208,10 @@ class CaptureWriter: NSObject {
         }
         
         // unref AVAssetWriter
-        self.avAssetWriterInputTimecode = nil
-        self.avAssetWriterInputVideo = nil
-        self.avAssetWriterInputAudio = nil
-        self.avAssetWriter = nil
+        avAssetWriterInputTimecode = nil
+        avAssetWriterInputVideo = nil
+        avAssetWriterInputAudio = nil
+        avAssetWriter = nil
         
         // reset TS variables and duration
         initializeTimeStamp()
@@ -256,7 +256,7 @@ class CaptureWriter: NSObject {
             }
             
             if duration > 0.0 {
-                avAssetWriter.endSession(atSourceTime: self.endTime)
+                avAssetWriter.endSession(atSourceTime: endTime)
             }
             
             let semaphore = DispatchSemaphore(value: 0)
@@ -308,22 +308,22 @@ class CaptureWriter: NSObject {
         objc_sync_enter(self)
         do {
             // Update InitialTimeStamp and EndTimeStamp
-            let presentation = CMSampleBufferGetPresentationTimeStamp(sampleBuffer)
-            let duration = CMSampleBufferGetDuration(sampleBuffer)
+            let sbPresentation = CMSampleBufferGetPresentationTimeStamp(sampleBuffer)
+            let sbDuration = CMSampleBufferGetDuration(sampleBuffer)
             
             // Set startTime CMTime value
-            if let avAssetWriter = self.avAssetWriter, self.isInitialTSReady == false {
+            if let avAssetWriter = avAssetWriter, isInitialTSReady == false {
                 // Set initial SourceTime value for AVAssetWriter
-                avAssetWriter.startSession(atSourceTime: presentation)
+                avAssetWriter.startSession(atSourceTime: sbPresentation)
                 
                 // Set initial time stamp for session
-                self.isInitialTSReady = true
-                self.startTime = presentation
+                isInitialTSReady = true
+                startTime = sbPresentation
             }
             
             // Update endTime/duration CMTime value
-            self.endTime = CMTimeAdd(presentation, duration)
-            self.duration = CMTimeGetSeconds(CMTimeSubtract(self.endTime, self.startTime))
+            endTime = CMTimeAdd(sbPresentation, sbDuration)
+            duration = CMTimeGetSeconds(CMTimeSubtract(endTime, startTime))
         }
         objc_sync_exit(self)
     }
@@ -332,15 +332,15 @@ class CaptureWriter: NSObject {
         objc_sync_enter(self)
         do {
             // Calc duration and Reset CMTime values
-            if self.isInitialTSReady == true {
+            if isInitialTSReady == true {
                 //print("### Reset InitialTS for session")
-                self.duration = CMTimeGetSeconds(CMTimeSubtract(self.endTime, self.startTime))
+                duration = CMTimeGetSeconds(CMTimeSubtract(endTime, startTime))
             } else {
-                self.duration = 0.0
+                duration = 0.0
             }
-            self.isInitialTSReady = false
-            self.startTime = CMTime.zero
-            self.endTime = CMTime.zero
+            isInitialTSReady = false
+            startTime = CMTime.zero
+            endTime = CMTime.zero
         }
         objc_sync_exit(self)
     }
@@ -566,19 +566,19 @@ class CaptureWriter: NSObject {
                 compressionProperties[AVVideoExpectedSourceFrameRateKey] = encodeVideoFrameRate
             }
         }
-
+        
         #if false
-            // For H264 encoder (using Main 3.1 maximum bitrate)
-            compressionProperties[AVVideoAverageBitRateKey] = 14*1000*1000
-            compressionProperties[AVVideoMaxKeyFrameIntervalKey] = 29
-            compressionProperties[AVVideoMaxKeyFrameIntervalDurationKey] = 1.0
-            compressionProperties[AVVideoAllowFrameReorderingKey] = true
-            compressionProperties[AVVideoProfileLevelKey] = AVVideoProfileLevelH264Main31
-            compressionProperties[AVVideoH264EntropyModeKey] = AVVideoH264EntropyModeCABAC
-            compressionProperties[AVVideoExpectedSourceFrameRateKey] = 30
-            compressionProperties[AVVideoAverageNonDroppableFrameRateKey] = 10
+        // For H264 encoder (using Main 3.1 maximum bitrate)
+        compressionProperties[AVVideoAverageBitRateKey] = 14*1000*1000
+        compressionProperties[AVVideoMaxKeyFrameIntervalKey] = 29
+        compressionProperties[AVVideoMaxKeyFrameIntervalDurationKey] = 1.0
+        compressionProperties[AVVideoAllowFrameReorderingKey] = true
+        compressionProperties[AVVideoProfileLevelKey] = AVVideoProfileLevelH264Main31
+        compressionProperties[AVVideoH264EntropyModeKey] = AVVideoH264EntropyModeCABAC
+        compressionProperties[AVVideoExpectedSourceFrameRateKey] = 30
+        compressionProperties[AVVideoAverageNonDroppableFrameRateKey] = 10
         #endif
-
+        
         if let fieldDetail = fieldDetail {
             // Use interlaced encoding
             let keyFieldCount = kVTCompressionPropertyKey_FieldCount as String
@@ -660,15 +660,15 @@ class CaptureWriter: NSObject {
         }
         
         #if false
-            // Clipping for kAudioFormatMPEG4AAC
-            if (audioOutputSettings[AVSampleRateKey] as! Float) > 48000.0 {
-                // kAudioFormatMPEG4AAC runs up to 48KHz
-                audioOutputSettings[AVSampleRateKey] = 48000
-            }
-            if (audioOutputSettings[AVEncoderBitRateKey] as! Int) > 320*1024 {
-                // kAudioFormatMPEG4AAC runs up to 320Kbps
-                audioOutputSettings[AVSampleRateKey] = 320*1024
-            }
+        // Clipping for kAudioFormatMPEG4AAC
+        if (audioOutputSettings[AVSampleRateKey] as! Float) > 48000.0 {
+            // kAudioFormatMPEG4AAC runs up to 48KHz
+            audioOutputSettings[AVSampleRateKey] = 48000
+        }
+        if (audioOutputSettings[AVEncoderBitRateKey] as! Int) > 320*1024 {
+            // kAudioFormatMPEG4AAC runs up to 320Kbps
+            audioOutputSettings[AVSampleRateKey] = 320*1024
+        }
         #endif
         
         return audioOutputSettings
