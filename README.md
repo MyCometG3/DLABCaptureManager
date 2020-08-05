@@ -77,8 +77,8 @@ NOTE: Compressed capture is not supported.
     manager = nil
 
 #### Development environment
-- MacOS X 10.15.4 Catalina
-- Xcode 11.5
+- MacOS X 10.15.6 Catalina
+- Xcode 11.6
 - Swift 5.2
 
 #### License
