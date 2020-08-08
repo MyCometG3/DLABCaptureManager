@@ -48,6 +48,9 @@ public class CaptureVideoPreview: NSView, CALayerDelegate {
     /// Initial value of hostTime offset in sec - used for media timebase
     private var baseOffsetInSec :Float64 = 0.0
     
+    /// CVPixelBufferPool
+    private var pixelBufferPool :CVPixelBufferPool? = nil
+    
     /* ================================================ */
     // MARK: - private properties (displayLink)
     /* ================================================ */
@@ -160,6 +163,11 @@ public class CaptureVideoPreview: NSView, CALayerDelegate {
             
             if let vLayer = videoLayer {
                 vLayer.flushAndRemoveImage()
+            }
+            
+            if let pixelBufferPool = pixelBufferPool {
+                CVPixelBufferPoolFlush(pixelBufferPool, .excessBuffers)
+                self.pixelBufferPool = nil
             }
             
             //
@@ -306,12 +314,35 @@ public class CaptureVideoPreview: NSView, CALayerDelegate {
             let format :OSType = CVPixelBufferGetPixelFormatType(pb)
             let alignment :Int = 16 // = 2^4 = 2 * sizeof(void*)
             let dict = [
-                kCVPixelBufferPixelFormatTypeKey: NSFileTypeForHFSTypeCode(format) as CFString,
+                kCVPixelBufferPixelFormatTypeKey: format as CFNumber,
                 kCVPixelBufferWidthKey: width as CFNumber,
                 kCVPixelBufferHeightKey: height as CFNumber,
                 kCVPixelBufferBytesPerRowAlignmentKey: alignment as CFNumber
                 ] as CFDictionary
-            CVPixelBufferCreate(kCFAllocatorDefault, width, height, format, dict, &pbOut)
+            if let pool = pixelBufferPool, let pbAttr = CVPixelBufferPoolGetPixelBufferAttributes(pool) {
+                // Check if pixelBufferPool is compatible or not
+                let typeOK = equalCFNumberInDictionary(dict, pbAttr, kCVPixelBufferPixelFormatTypeKey)
+                let widthOK = equalCFNumberInDictionary(dict, pbAttr, kCVPixelBufferWidthKey)
+                let heightOK = equalCFNumberInDictionary(dict, pbAttr, kCVPixelBufferHeightKey)
+                let strideOK = equalCFNumberInDictionary(dict, pbAttr, kCVPixelBufferBytesPerRowAlignmentKey)
+                if !(typeOK && widthOK && heightOK && strideOK) {
+                    CVPixelBufferPoolFlush(pool, .excessBuffers)
+                    self.pixelBufferPool = nil
+                }
+            }
+            if pixelBufferPool == nil {
+                let poolAttr = [
+                    kCVPixelBufferPoolMinimumBufferCountKey: 4 as CFNumber
+                    ] as CFDictionary
+                let err = CVPixelBufferPoolCreate(kCFAllocatorDefault, poolAttr, dict, &pixelBufferPool)
+                if err != kCVReturnSuccess {
+                    NSLog("ERROR: Failed to create CVPixelBufferPool")
+                    return nil
+                }
+            }
+            if let pixelBufferPool = pixelBufferPool {
+                CVPixelBufferPoolCreatePixelBuffer(kCFAllocatorDefault, pixelBufferPool, &pbOut)
+            }
             
             if let pbOut = pbOut {
                 CVPixelBufferLockBaseAddress(pb, .readOnly)
@@ -444,6 +475,19 @@ public class CaptureVideoPreview: NSView, CALayerDelegate {
             num = fromOpaque(ptr, CFNumber.self)
         }
         return num
+    }
+    
+    /// Check if two values for single key in different dictionary are equal or not.
+    /// - Parameters:
+    ///   - d1: CFDictionary
+    ///   - d2: CFDictionary
+    ///   - key: CFString
+    /// - Returns: true if equal, false if different
+    private func equalCFNumberInDictionary(_ d1 :CFDictionary, _ d2 :CFDictionary, _ key :CFString) -> Bool {
+        let val1 = extractCFNumber(d1, key)
+        let val2 = extractCFNumber(d2, key)
+        let comp = CFNumberCompare(val1, val2, nil)
+        return (comp == CFComparisonResult.compareEqualTo)
     }
     
     /// Extract CFArray value of specified key from CFDictionary
