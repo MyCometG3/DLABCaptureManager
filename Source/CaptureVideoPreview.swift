@@ -290,17 +290,7 @@ public class CaptureVideoPreview: NSView, CALayerDelegate {
         if let fd = fd {
             let dim :CMVideoDimensions = CMVideoFormatDescriptionGetDimensions(fd)
             let subType :CMVideoCodecType = CMFormatDescriptionGetMediaSubType(fd)
-            var ext :CFDictionary? = CMFormatDescriptionGetExtensions(fd)
-            if let ext1 = ext {
-                // remove cleanaperture extension if available
-                let clap = toOpaque(kCMFormatDescriptionExtension_CleanAperture)
-                if CFDictionaryContainsKey(ext1, clap) {
-                    let count :CFIndex = CFDictionaryGetCount(ext1)
-                    let ext2 :CFMutableDictionary = CFDictionaryCreateMutableCopy(kCFAllocatorDefault, count, ext1)
-                    CFDictionaryRemoveValue(ext2, clap)
-                    ext = CFDictionaryCreateCopy(kCFAllocatorDefault, ext2)
-                }
-            }
+            let ext :CFDictionary? = CMFormatDescriptionGetExtensions(fd)
             CMVideoFormatDescriptionCreate(allocator: kCFAllocatorDefault,
                                            codecType: subType, width: dim.width, height: dim.height, extensions: ext,
                                            formatDescriptionOut: &fdOut)
@@ -411,8 +401,14 @@ public class CaptureVideoPreview: NSView, CALayerDelegate {
             
             var cleanSize : CGSize = encodedSize // Initial value is full size (= no clean aperture)
             if let dict = extractCFDictionary(pixelBuffer, kCVImageBufferCleanApertureKey) {
-                let clapWidth = extractRational(dict, kCMFormatDescriptionKey_CleanApertureWidthRational)
-                let clapHeight = extractRational(dict, kCMFormatDescriptionKey_CleanApertureHeightRational)
+                var clapWidth = extractRational(dict, kCMFormatDescriptionKey_CleanApertureWidthRational)
+                if clapWidth == CGFloat.nan {
+                    clapWidth = extractCGFloat(dict, kCVImageBufferCleanApertureWidthKey)
+                }
+                var clapHeight = extractRational(dict, kCMFormatDescriptionKey_CleanApertureHeightRational)
+                if clapHeight == CGFloat.nan {
+                    clapHeight = extractCGFloat(dict, kCVImageBufferCleanApertureHeightKey)
+                }
                 if clapWidth != CGFloat.nan && clapHeight != CGFloat.nan {
                     let clapSize = CGSize(width: clapWidth, height: clapHeight)
                     cleanSize = CGSize(width: clapSize.width * sampleAspect,
