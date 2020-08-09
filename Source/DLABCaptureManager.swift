@@ -28,6 +28,8 @@ public class DLABCaptureManager: NSObject, DLABInputCaptureDelegate {
     public var audioDepth :DLABAudioSampleType = .type16bitInteger
     
     /// Capture audio channels. 2 for Stereo. 8 or 16 for discrete.
+    ///
+    /// Set 0 to disable audioCapture and audioPreview.
     public var audioChannels :UInt32 = 2
     
     /// Capture audio bit rate (See DLABConstants.h)
@@ -48,7 +50,7 @@ public class DLABCaptureManager: NSObject, DLABInputCaptureDelegate {
     }
     
     /// True while audio capture is enabled
-    private var audioCaptureEnabled :Bool = false
+    public private(set) var audioCaptureEnabled :Bool = false
     
     /// AudioPreview object
     private var audioPreview :CaptureAudioPreview? = nil
@@ -64,7 +66,8 @@ public class DLABCaptureManager: NSObject, DLABInputCaptureDelegate {
     public var pixelFormat :DLABPixelFormat = .format8BitYUV
     
     /// Override specific CoreVideoPixelFormat (with conversion)
-    /// @discussion set 0 to use Default CVPixelFormat
+    ///
+    /// Set 0 to use Default CVPixelFormat
     public var cvPixelFormat : OSType = 0
     
     /// Capture video DLABVideoInputFlag (See DLABConstants.h)
@@ -72,6 +75,12 @@ public class DLABCaptureManager: NSObject, DLABInputCaptureDelegate {
     
     /// Video Input Connection
     public var videoConnection :DLABVideoConnection = .init()
+    
+    /// True while video capture is enabled
+    public private(set) var videoCaptureEnabled :Bool = false
+    
+    /// Set CaptureVideoPreview view here - based on AVSampleBufferDisplayLayer
+    public weak var videoPreview :CaptureVideoPreview? = nil
     
     /// Parent NSView for video preview - based on CreateCocoaScreenPreview()
     public weak var parentView :NSView? = nil {
@@ -88,9 +97,6 @@ public class DLABCaptureManager: NSObject, DLABInputCaptureDelegate {
             }
         }
     }
-    
-    /// Set CaptureVideoPreview view here - based on AVSampleBufferDisplayLayer
-    public weak var videoPreview :CaptureVideoPreview? = nil
     
     /* ============================================ */
     // MARK: - properties - Recording
@@ -234,19 +240,13 @@ public class DLABCaptureManager: NSObject, DLABInputCaptureDelegate {
         }
         
         if let device = currentDevice, running == false {
-            // support for timecode
-            timecodeReady = false
-            prepTimecodeHelper()
+            if supportTimecodeCoreAudio || supportTimecodeVANC {
+                // support for timecode
+                timecodeReady = false
+                prepTimecodeHelper()
+            }
             
             do {
-                if let parentView = parentView {
-                    try device.setInputScreenPreviewTo(parentView)
-                }
-                
-                if let videoPreview = videoPreview {
-                    videoPreview.prepare()
-                }
-                
                 var vSetting:DLABVideoSetting? = nil
                 var aSetting:DLABAudioSetting? = nil
                 try vSetting = device.createInputVideoSetting(of: displayMode,
@@ -290,33 +290,49 @@ public class DLABCaptureManager: NSObject, DLABInputCaptureDelegate {
                     vSetting.cvPixelFormatType = cvPixelFormat
                     try vSetting.buildVideoFormatDescription()
                 }
+                
+                videoCaptureEnabled = false
                 if let vSetting = vSetting {
-                    device.inputDelegate = self
+                    // Enable Video Preview
+                    if let parentView = parentView {
+                        try device.setInputScreenPreviewTo(parentView)
+                    }
+                    if let videoPreview = videoPreview {
+                        videoPreview.prepare()
+                    }
+                    
+                    // Enable Video Capture
                     if videoConnection.rawValue > 0 {
                         try device.enableVideoInput(with: vSetting, on: videoConnection)
                     } else {
                         try device.enableVideoInput(with: vSetting)
                     }
-                    audioCaptureEnabled = false
-                    if let aSetting = aSetting {
-                        if let audioFormatDescription = aSetting.audioFormatDescription {
-                            audioPreview = CaptureAudioPreview(audioFormatDescription)
-                            if let audioPreview = audioPreview {
-                                audioPreview.volume = Float32(volume)
-                            }
+                    videoCaptureEnabled = true
+                }
+                
+                audioCaptureEnabled = false
+                if let aSetting = aSetting {
+                    // Enable Audio Preview
+                    if let audioFormatDescription = aSetting.audioFormatDescription {
+                        audioPreview = CaptureAudioPreview(audioFormatDescription)
+                        if let audioPreview = audioPreview {
+                            audioPreview.volume = Float32(volume)
                         }
-                        
-                        if audioConnection.rawValue > 0 {
-                            try device.enableAudioInput(with: aSetting, on: audioConnection)
-                        } else {
-                            try device.enableAudioInput(with: aSetting)
-                        }
-                        
-                        audioCaptureEnabled = true
                     }
                     
+                    // Enable Audio Capture
+                    if audioConnection.rawValue > 0 {
+                        try device.enableAudioInput(with: aSetting, on: audioConnection)
+                    } else {
+                        try device.enableAudioInput(with: aSetting)
+                    }
+                    audioCaptureEnabled = true
+                }
+                
+                if (audioCaptureEnabled || videoCaptureEnabled) {
+                    // Start stream
+                    device.inputDelegate = self
                     try device.startStreams()
-                    
                     running = true
                 }
             } catch let error as NSError {
@@ -327,41 +343,47 @@ public class DLABCaptureManager: NSObject, DLABInputCaptureDelegate {
     
     /// Stop capture session
     public func captureStop() {
-        if let device = currentDevice {
+        if let device = currentDevice, running == true {
+            if recording {
+                recordToggle()
+            }
             do {
-                if running {
-                    try device.stopStreams()
+                // Stop stream
+                running = false
+                try device.stopStreams()
+                device.inputDelegate = nil
+                
+                // Disable Capture
+                if videoCaptureEnabled {
+                    videoCaptureEnabled = false
                     try device.disableVideoInput()
-                    if audioCaptureEnabled {
-                        audioCaptureEnabled = false
-                        try device.disableAudioInput()
-                    }
-                    device.inputDelegate = nil
-                    
-                    if let videoPreview = videoPreview {
-                        videoPreview.shutdown()
-                    }
-                    
-                    if let _ = parentView {
-                        try device.setInputScreenPreviewTo(nil)
-                    }
-                    
-                    if let audioPreview = audioPreview {
-                        try audioPreview.aqStop()
-                        try audioPreview.aqDispose()
-                        self.audioPreview = nil
-                    }
+                }
+                if audioCaptureEnabled {
+                    audioCaptureEnabled = false
+                    try device.disableAudioInput()
+                }
+                
+                // Disable Preview
+                if let videoPreview = videoPreview {
+                    videoPreview.shutdown()
+                }
+                if let _ = parentView {
+                    try device.setInputScreenPreviewTo(nil)
+                }
+                if let audioPreview = audioPreview {
+                    try audioPreview.aqStop()
+                    try audioPreview.aqDispose()
+                    self.audioPreview = nil
                 }
             } catch let error as NSError {
                 print("ERROR:\(error.domain)(\(error.code)): \(error.localizedFailureReason ?? "unknown reason")")
             }
             
-            running = false
-            currentDevice = nil
-            
-            // support for timecode
-            timecodeReady = false
-            timecodeHelper = nil
+            if supportTimecodeCoreAudio || supportTimecodeVANC {
+                // support for timecode
+                timecodeReady = false
+                timecodeHelper = nil
+            }
         }
     }
     
