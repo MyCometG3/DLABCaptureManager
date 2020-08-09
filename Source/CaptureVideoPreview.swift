@@ -36,6 +36,8 @@ public class CaptureVideoPreview: NSView, CALayerDelegate {
     // MARK: - private properties
     /* ================================================ */
     
+    /// Prepared or not
+    private var prepared :Bool = false
     /// Processing dispatch queue
     private var processingQueue :DispatchQueue? = nil
     /// Processing dispatch queue label
@@ -126,8 +128,9 @@ public class CaptureVideoPreview: NSView, CALayerDelegate {
     /// Prepare videoPreview and CVDisplayLink.
     public func prepare() {
         queueSync {
-            // Clean up first
-            shutdown()
+            guard prepared == false else { return }
+            
+            prepared = true
             
             // Add CMSampleBufferDisplayLayer to SubLayer
             if let baseLayer = layer, let vLayer = videoLayer {
@@ -148,6 +151,10 @@ public class CaptureVideoPreview: NSView, CALayerDelegate {
     /// Shutdown videoPreview and CVDisplayLink.
     public func shutdown() {
         queueSync {
+            guard prepared == true else { return }
+            
+            prepared = false
+            
             if useDisplayLink {
                 shutdownDisplayLink()
             }
@@ -419,10 +426,18 @@ public class CaptureVideoPreview: NSView, CALayerDelegate {
             let productionSize = CGSize(width: encodedSize.width * sampleAspect,
                                         height: encodedSize.height)
             
-            sampleAspectRatio = sampleAspect
-            sampleEncodedSize = encodedSize
-            sampleCleanSize = cleanSize
-            sampleProductionSize = productionSize
+            if (sampleAspectRatio    != sampleAspect ||
+                sampleEncodedSize    != encodedSize  ||
+                sampleCleanSize      != cleanSize    ||
+                sampleProductionSize != productionSize)
+            {
+                sampleAspectRatio    = sampleAspect
+                sampleEncodedSize    = encodedSize
+                sampleCleanSize      = cleanSize
+                sampleProductionSize = productionSize
+                
+                NSLog("INFO: Update video sample property.")
+            }
         }
     }
     
