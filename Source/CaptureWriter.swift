@@ -97,8 +97,13 @@ class CaptureWriter: NSObject {
     private var avAssetWriterInputAudio : AVAssetWriterInput? = nil
     /// Backend AVAssetWriterInput for timecode media
     private var avAssetWriterInputTimecode : AVAssetWriterInput? = nil
-    /// Private serial queue for sequencial processing
-    private var queue : DispatchQueue? = nil
+    
+    /// Processing dispatch queue
+    private var processingQueue :DispatchQueue? = nil
+    /// Processing dispatch queue label
+    private let processingQueueLabel = "writer"
+    /// Processing dispatch queue key
+    private let processingQueueSpecificKey = DispatchSpecificKey<Void>()
     
     /* ============================================ */
     // MARK: - public init/deinit
@@ -126,41 +131,46 @@ class CaptureWriter: NSObject {
             closeSession()
         }
         
-        queue = DispatchQueue(label: "WriterQueue") // serial queue
-        queue?.sync {
+        // Prepare Processing DispatchQueue
+        if processingQueue == nil {
+            let queue = DispatchQueue(label:processingQueueLabel)
+            queue.setSpecific(key: processingQueueSpecificKey, value: ())
+            processingQueue = queue
+        }
+        
+        queueSync {
             isRecording = startRecording()
         }
     }
     
     /// Stop writing session
     public func closeSession() {
-        queue?.sync {
+        queueSync {
             if isRecording {
                 stopRecording()
             }
             
             isRecording = false
-            queue = nil
         }
     }
     
     /// Append Video SampleBuffer
     public func appendVideoSampleBuffer(sampleBuffer :CMSampleBuffer) {
-        queue?.async {
+        queueAsync {
             self.writeVideoSampleBuffer(sampleBuffer)
         }
     }
     
     /// Append Audio SampleBuffer
     public func appendAudioSampleBuffer(sampleBuffer :CMSampleBuffer) {
-        queue?.async {
+        queueAsync {
             self.writeAudioSampleBuffer(sampleBuffer)
         }
     }
     
     /// Append Timecode SampleBuffer
     public func appendTimecodeSampleBuffer(sampleBuffer :CMSampleBuffer) {
-        queue?.async {
+        queueAsync {
             self.writeTimecodeSampleBuffer(sampleBuffer)
         }
     }
@@ -168,6 +178,33 @@ class CaptureWriter: NSObject {
     /* ============================================ */
     // MARK: - Internal/Private func
     /* ============================================ */
+    
+    /// Process block in sync
+    ///
+    /// - Parameter block: block to process
+    private func queueSync(_ block :(()->Void)) {
+        guard let queue = processingQueue else { return }
+        
+        if nil != DispatchQueue.getSpecific(key: processingQueueSpecificKey) {
+            block()
+        } else {
+            queue.sync(execute: block)
+        }
+    }
+    
+    /// Process block in async
+    ///
+    /// - Parameter block: block to process
+    private func queueAsync(_ block :@escaping ()->Void) {
+        guard let queue = processingQueue else { return }
+        
+        if nil != DispatchQueue.getSpecific(key: processingQueueSpecificKey) {
+            queue.async(execute: block)
+            //block()
+        } else {
+            queue.async(execute: block)
+        }
+    }
     
     private func startRecording() -> Bool {
         if movieURL == nil {
