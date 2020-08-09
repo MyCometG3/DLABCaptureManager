@@ -146,18 +146,8 @@ class CaptureTimecodeHelper: NSObject {
         
         // Create SMPTETime struct from sampleBuffer attachment
         var smpteTime: CVSMPTETime? = nil
-        if let smpteTimeData = smpteTimeData as? Data {
-            let data = (smpteTimeData as NSData).bytes.bindMemory(to: CVSMPTETime.self,
-                                                                  capacity: smpteTimeData.count).pointee
-            smpteTime = CVSMPTETime(subframes: data.subframes,
-                                    subframeDivisor: data.subframeDivisor,
-                                    counter: data.counter,
-                                    type: data.type,
-                                    flags: data.flags,
-                                    hours: data.hours,
-                                    minutes: data.minutes,
-                                    seconds: data.seconds,
-                                    frames: data.frames)
+        if let smpteTimeData = smpteTimeData as? NSData {
+            smpteTime = smpteTimeData.bytes.load(as: CVSMPTETime.self)
         }
         
         return smpteTime
