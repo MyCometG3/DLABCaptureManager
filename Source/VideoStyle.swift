@@ -282,18 +282,10 @@ public enum VideoStyle : String {
             // UHD (Rec. 2020)
             //   3840x2160 UHDTV (Rec. ITU-R BT. 2020)
             videoOutputSettings[AVVideoColorPropertiesKey] = [
-                AVVideoColorPrimariesKey : kCVImageBufferColorPrimaries_ITU_R_2020,
-                AVVideoTransferFunctionKey : kCVImageBufferTransferFunction_ITU_R_709_2,
-                AVVideoYCbCrMatrixKey : kCVImageBufferYCbCrMatrix_ITU_R_2020
+                AVVideoColorPrimariesKey : AVVideoColorPrimaries_ITU_R_2020,
+                AVVideoTransferFunctionKey : AVVideoTransferFunction_ITU_R_709_2,
+                AVVideoYCbCrMatrixKey : AVVideoYCbCrMatrix_ITU_R_2020
             ]
-            // NOTE: Following params requires 10.13 so I use kCVImageBuffer* instead
-            //if #available(OSX 10.13, *) {
-            //    videoOutputSettings[AVVideoColorPropertiesKey] = [
-            //        AVVideoColorPrimariesKey : AVVideoColorPrimaries_ITU_R_2020,
-            //        AVVideoTransferFunctionKey : AVVideoTransferFunction_ITU_R_709_2,
-            //        AVVideoYCbCrMatrixKey : AVVideoYCbCrMatrix_ITU_R_2020
-            //    ]
-            //}
         }
         
         /*

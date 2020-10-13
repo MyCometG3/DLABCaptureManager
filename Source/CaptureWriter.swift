@@ -568,13 +568,13 @@ class CaptureWriter: NSObject {
         
         // video output codec
         if encodeProRes422 {
-            videoOutputSettings[AVVideoCodecKey] = AVVideoCodecAppleProRes422
+            videoOutputSettings[AVVideoCodecKey] = AVVideoCodecType.proRes422
         } else {
             if let encodeVideoCodecType = encodeVideoCodecType {
                 let fourCC :String = fourCharString(encodeVideoCodecType)
                 videoOutputSettings[AVVideoCodecKey] = fourCC
             } else {
-                videoOutputSettings[AVVideoCodecKey] = AVVideoCodecH264
+                videoOutputSettings[AVVideoCodecKey] = AVVideoCodecType.h264
             }
         }
         
@@ -594,8 +594,6 @@ class CaptureWriter: NSObject {
                 compressionProperties[AVVideoMaxKeyFrameIntervalDurationKey] = 1.0
                 compressionProperties[AVVideoExpectedSourceFrameRateKey] = encodeVideoFrameRate
             }
-        }
-        if #available(OSX 10.13, *) {
             if codecString == "hvc1" {
                 compressionProperties[AVVideoProfileLevelKey] = kVTProfileLevel_HEVC_Main_AutoLevel as String
                 compressionProperties[AVVideoAllowFrameReorderingKey] = true
