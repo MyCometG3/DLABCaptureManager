@@ -409,14 +409,14 @@ public class CaptureVideoPreview: NSView, CALayerDelegate {
             var cleanSize : CGSize = encodedSize // Initial value is full size (= no clean aperture)
             if let dict = extractCFDictionary(pixelBuffer, kCVImageBufferCleanApertureKey) {
                 var clapWidth = extractRational(dict, kCMFormatDescriptionKey_CleanApertureWidthRational)
-                if clapWidth == CGFloat.nan {
+                if clapWidth.isNaN {
                     clapWidth = extractCGFloat(dict, kCVImageBufferCleanApertureWidthKey)
                 }
                 var clapHeight = extractRational(dict, kCMFormatDescriptionKey_CleanApertureHeightRational)
-                if clapHeight == CGFloat.nan {
+                if clapHeight.isNaN {
                     clapHeight = extractCGFloat(dict, kCVImageBufferCleanApertureHeightKey)
                 }
-                if clapWidth != CGFloat.nan && clapHeight != CGFloat.nan {
+                if !clapWidth.isNaN && !clapHeight.isNaN {
                     let clapSize = CGSize(width: clapWidth, height: clapHeight)
                     cleanSize = CGSize(width: clapSize.width * sampleAspect,
                                        height: clapSize.height)
@@ -543,7 +543,7 @@ public class CaptureVideoPreview: NSView, CALayerDelegate {
         var size :CGSize = CGSize.zero
         let val1 = extractCGFloat(dict, key1)
         let val2 = extractCGFloat(dict, key2)
-        if val1 != CGFloat.nan && val2 != CGFloat.nan {
+        if !val1.isNaN && !val2.isNaN {
             size = CGSize(width: val1, height: val2)
         }
         return size
