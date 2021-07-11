@@ -314,7 +314,8 @@ public class CaptureVideoPreview: NSView, CALayerDelegate {
                 kCVPixelBufferPixelFormatTypeKey: format as CFNumber,
                 kCVPixelBufferWidthKey: width as CFNumber,
                 kCVPixelBufferHeightKey: height as CFNumber,
-                kCVPixelBufferBytesPerRowAlignmentKey: alignment as CFNumber
+                kCVPixelBufferBytesPerRowAlignmentKey: alignment as CFNumber,
+                kCVPixelBufferIOSurfacePropertiesKey: [:],
                 ] as CFDictionary
             if let pool = pixelBufferPool, let pbAttr = CVPixelBufferPoolGetPixelBufferAttributes(pool) {
                 // Check if pixelBufferPool is compatible or not
