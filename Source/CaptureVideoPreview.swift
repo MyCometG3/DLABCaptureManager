@@ -245,7 +245,7 @@ public class CaptureVideoPreview: NSView, CALayerDelegate {
             // Create new CMTimebase using HostTimeClock
             let clock :CMClock = CMClockGetHostTimeClock()
             var timebase :CMTimebase? = nil
-            let status :OSStatus = CMTimebaseCreateWithMasterClock(allocator: kCFAllocatorDefault, masterClock: clock, timebaseOut: &timebase)
+            let status :OSStatus = CMTimebaseCreateWithSourceClock(allocator: kCFAllocatorDefault, sourceClock: clock, timebaseOut: &timebase)
             
             // Set controlTimebase
             if status == noErr, let timebase = timebase {
