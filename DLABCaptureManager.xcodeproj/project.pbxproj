@@ -307,7 +307,7 @@
 				CODE_SIGN_IDENTITY = "";
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 2021.07.11;
+				CURRENT_PROJECT_VERSION = 2022.01.10;
 				DEFINES_MODULE = YES;
 				DEVELOPMENT_TEAM = BV5C4YNA4Z;
 				DYLIB_COMPATIBILITY_VERSION = 1;
@@ -317,7 +317,7 @@
 				INFOPLIST_FILE = DLABCaptureManager/Info.plist;
 				INSTALL_PATH = "$(LOCAL_LIBRARY_DIR)/Frameworks";
 				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/../Frameworks @loader_path/Frameworks";
-				MARKETING_VERSION = 0.9.4.1;
+				MARKETING_VERSION = 0.9.5;
 				PRODUCT_BUNDLE_IDENTIFIER = com.mycometg3.DLABCaptureManager;
 				PRODUCT_NAME = "$(TARGET_NAME:c99extidentifier)";
 				SKIP_INSTALL = YES;
@@ -331,7 +331,7 @@
 				CODE_SIGN_IDENTITY = "";
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 2021.07.11;
+				CURRENT_PROJECT_VERSION = 2022.01.10;
 				DEFINES_MODULE = YES;
 				DEVELOPMENT_TEAM = BV5C4YNA4Z;
 				DYLIB_COMPATIBILITY_VERSION = 1;
@@ -341,7 +341,7 @@
 				INFOPLIST_FILE = DLABCaptureManager/Info.plist;
 				INSTALL_PATH = "$(LOCAL_LIBRARY_DIR)/Frameworks";
 				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/../Frameworks @loader_path/Frameworks";
-				MARKETING_VERSION = 0.9.4.1;
+				MARKETING_VERSION = 0.9.5;
 				PRODUCT_BUNDLE_IDENTIFIER = com.mycometg3.DLABCaptureManager;
 				PRODUCT_NAME = "$(TARGET_NAME:c99extidentifier)";
 				SKIP_INSTALL = YES;
