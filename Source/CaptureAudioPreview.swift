@@ -434,17 +434,8 @@ class CaptureAudioPreview: NSObject {
         
         queueSync {
             if let audioQueue = self.audioQueue {
-                // Stop AudioQueue first
-                try? aqStop()
-                
-                // Release AudioQueueBuffer(s)
-                for index in 0..<kNumberBuffer {
-                    let outBuffer :AudioQueueBufferRef? = aqBufferRefArray[index]
-                    if let outBuffer = outBuffer {
-                        status = AudioQueueFreeBuffer(audioQueue, outBuffer)
-                    }
-                }
-                // Ignore any error status here
+                // Flush AudioQueue first
+                try? aqFlush()
                 
                 // Dispose AudioQueue
                 status = AudioQueueDispose(audioQueue, true)
@@ -531,7 +522,7 @@ class CaptureAudioPreview: NSObject {
         var errReason :String? = nil
         
         queueSync {
-            if let audioQueue = audioQueue { // , running == true
+            if let audioQueue = audioQueue, running == true {
                 status = AudioQueueStop(audioQueue, true)
                 
                 running = (status == 0) ? false : true
