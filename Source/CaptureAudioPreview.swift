@@ -28,6 +28,8 @@ class CaptureAudioPreview: NSObject {
     private var aqBufferRefArray :[AudioQueueBufferRef] = []
     /// AudioQueue DispatchQueue
     private var internalQueue :DispatchQueue? = nil
+    /// AudioQueue DispatchQueue label
+    private let internalQueueLabel = "audioPreviewInternal"
     
     /// Processing dispatch queue
     private var processingQueue :DispatchQueue? = nil
@@ -114,7 +116,7 @@ class CaptureAudioPreview: NSObject {
                 }
             }
         }
-        internalQueue = DispatchQueue(label: "audioPreviewInternal")
+        internalQueue = DispatchQueue(label: internalQueueLabel)
         if let internalQueue = internalQueue {
             status = AudioQueueNewOutputWithDispatchQueue(&audioQueue,
                                                           &asbd,
