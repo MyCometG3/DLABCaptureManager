@@ -9,6 +9,29 @@
 import Cocoa
 import DLABridging
 
+/// Specify preferred timecodeSource.
+public enum TimecodeType :Int {
+    ///  SERIAL: validate on DLABTimecodeFormatSerial
+    case SERIAL = 1
+    ///  VITC: validate on DLABTimecodeFormatVITC/VITCField2
+    case VITC = 2
+    ///  RP188: validate on DLABTimecodeFormatRP188HighFrameRate/RP188VITC1/RP188LTC/RP188VITC2
+    case RP188 = 4
+    ///  CoreAudio: validate on CoreAudio SMPTETime CMAttachment (experimental)
+    case CoreAudio = 8
+    
+    /// True if it is from any Decklink Device
+    /// - Returns: Bool
+    public func byDevice() -> Bool {
+        switch self {
+        case .SERIAL, .VITC, .RP188:
+            return true
+        default:
+            return false
+        }
+    }
+}
+
 public class DLABCaptureManager: NSObject, DLABInputCaptureDelegate {
     /* ============================================ */
     // MARK: - properties - Capturing
@@ -207,11 +230,8 @@ public class DLABCaptureManager: NSObject, DLABInputCaptureDelegate {
     /// Timecode format type (timecode
     public var timecodeFormatType : CMTimeCodeFormatType = kCMTimeCodeFormatType_TimeCode32
     
-    /// Set true to use timecode VANC
-    public var supportTimecodeVANC :Bool = true
-    
-    /// Set true to use timecode CoreAudio
-    public var supportTimecodeCoreAudio :Bool = true
+    /// Validate if source provides timecode of specified type. Set before captureStart().
+    public var timecodeSource :TimecodeType? = nil
     
     /* ============================================ */
     // MARK: - public init/deinit
@@ -240,7 +260,7 @@ public class DLABCaptureManager: NSObject, DLABInputCaptureDelegate {
         }
         
         if let device = currentDevice, running == false {
-            if supportTimecodeCoreAudio || supportTimecodeVANC {
+            if timecodeSource != nil {
                 // support for timecode
                 timecodeReady = false
                 prepTimecodeHelper()
@@ -330,6 +350,9 @@ public class DLABCaptureManager: NSObject, DLABInputCaptureDelegate {
                 }
                 
                 if (audioCaptureEnabled || videoCaptureEnabled) {
+                    // Update inputVideoSetting
+                    applyTimecodeSetting()
+                    
                     // Start stream
                     device.inputDelegate = self
                     try device.startStreams()
@@ -379,7 +402,7 @@ public class DLABCaptureManager: NSObject, DLABInputCaptureDelegate {
                 print("ERROR:\(error.domain)(\(error.code)): \(error.localizedFailureReason ?? "unknown reason")")
             }
             
-            if supportTimecodeCoreAudio || supportTimecodeVANC {
+            do {
                 // support for timecode
                 timecodeReady = false
                 timecodeHelper = nil
@@ -407,6 +430,9 @@ public class DLABCaptureManager: NSObject, DLABInputCaptureDelegate {
             } else {
                 // support for timecode
                 prepTimecodeHelper()
+                
+                // Update inputVideoSetting
+                applyTimecodeSetting()
                 
                 // prepare writer
                 writer = CaptureWriter()
@@ -475,11 +501,31 @@ public class DLABCaptureManager: NSObject, DLABInputCaptureDelegate {
     }
     
     private func prepTimecodeHelper() {
-        if supportTimecodeCoreAudio {
+        if let timecodeSource = timecodeSource, timecodeSource == .CoreAudio {
             if let timecodeHelper = timecodeHelper {
                 timecodeHelper.timeCodeFormatType = timecodeFormatType
             } else {
                 timecodeHelper = CaptureTimecodeHelper(formatType: timecodeFormatType)
+            }
+        }
+    }
+    
+    private func applyTimecodeSetting() {
+        if let vSetting = currentDevice?.inputVideoSetting {
+            vSetting.useSERIAL = false
+            vSetting.useVITC = false
+            vSetting.useRP188 = false
+            if let timecodeSource = timecodeSource {
+                switch timecodeSource {
+                case .SERIAL:
+                    vSetting.useSERIAL = true
+                case .VITC:
+                    vSetting.useVITC = true
+                case .RP188:
+                    vSetting.useRP188 = true
+                default:
+                    break
+                }
             }
         }
     }
@@ -523,7 +569,7 @@ public class DLABCaptureManager: NSObject, DLABInputCaptureDelegate {
         }
         
         // support for core_audio_smpte_time
-        if supportTimecodeCoreAudio, let timecodeHelper = timecodeHelper {
+        if let timecodeSource = timecodeSource, timecodeSource == .CoreAudio, let timecodeHelper = timecodeHelper {
             let timecodeSampleBuffer = timecodeHelper.createTimeCodeSample(from: sampleBuffer)
             if let timecodeSampleBuffer = timecodeSampleBuffer {
                 if let writer = writer {
@@ -533,7 +579,7 @@ public class DLABCaptureManager: NSObject, DLABInputCaptureDelegate {
                 // source provides timecode
                 if timecodeReady == false {
                     timecodeReady = true
-                    // print("NOTICE: timecodeReady : core_audio_smpte_time")
+                    print("NOTICE: timecodeReady : core_audio_smpte_time")
                 }
             }
         }
@@ -555,8 +601,8 @@ public class DLABCaptureManager: NSObject, DLABInputCaptureDelegate {
             videoPreview.queueSampleBuffer(sampleBuffer)
         }
         
-        // support for VANC timecode
-        if supportTimecodeVANC {
+        // support for Device timecode
+        if let timecodeSource = timecodeSource, timecodeSource.byDevice() {
             let timecodeSampleBuffer = setting.createTimecodeSample(in: timecodeFormatType,
                                                                     videoSample: sampleBuffer)
             if let timecodeSampleBuffer = timecodeSampleBuffer {
@@ -567,7 +613,7 @@ public class DLABCaptureManager: NSObject, DLABInputCaptureDelegate {
                 // source provides timecode
                 if timecodeReady == false {
                     timecodeReady = true
-                    // print("NOTICE: timecodeReady : VANC")
+                    print("NOTICE: timecodeReady : \(timecodeSource)")
                 }
             }
         }
@@ -671,6 +717,7 @@ public class DLABCaptureManager: NSObject, DLABInputCaptureDelegate {
             info["fieldDominance"] = NSFileTypeForHFSTypeCode(setting.fieldDominance.rawValue) // String
             info["displayModeFlag"] = setting.displayModeFlag.rawValue // uint32_t -> UInt32
             info["isHD"] = setting.isHD // BOOL
+            info["useSERIAL"] = setting.useSERIAL // BOOL
             info["useVITC"] = setting.useVITC // BOOL
             info["useRP188"] = setting.useRP188 // BOOL
             
