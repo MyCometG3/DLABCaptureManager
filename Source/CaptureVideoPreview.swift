@@ -105,9 +105,6 @@ public class CaptureVideoPreview: NSView, CALayerDelegate {
     
     deinit {
         shutdown()
-        
-        videoLayer = nil
-        processingQueue = nil
     }
     
     override public var wantsUpdateLayer: Bool {
@@ -182,6 +179,9 @@ public class CaptureVideoPreview: NSView, CALayerDelegate {
             sampleEncodedSize = nil
             sampleCleanSize = nil
             sampleProductionSize = nil
+            
+            videoLayer = nil
+            processingQueue = nil
         }
     }
     
