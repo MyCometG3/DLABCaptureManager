@@ -104,7 +104,7 @@ public class CaptureVideoPreview: NSView, CALayerDelegate {
     }
     
     deinit {
-        shutdown()
+        cleanup()
     }
     
     override public var wantsUpdateLayer: Bool {
@@ -179,9 +179,6 @@ public class CaptureVideoPreview: NSView, CALayerDelegate {
             sampleEncodedSize = nil
             sampleCleanSize = nil
             sampleProductionSize = nil
-            
-            videoLayer = nil
-            processingQueue = nil
         }
     }
     
@@ -258,6 +255,14 @@ public class CaptureVideoPreview: NSView, CALayerDelegate {
         } else {
             NSLog("ERROR: Failed to setup videoLayer.")
         }
+    }
+    
+    /// clean up func
+    private func cleanup() {
+        shutdown()
+        
+        videoLayer = nil
+        processingQueue = nil
     }
     
     /// Process block in sync
