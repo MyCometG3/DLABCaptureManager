@@ -1,5 +1,5 @@
 //
-//  DLABCaptureManager.swift
+//  CaptureManager.swift
 //  DLABCaptureManager
 //
 //  Created by Takashi Mochizuki on 2017/10/09.
@@ -32,7 +32,7 @@ public enum TimecodeType :Int {
     }
 }
 
-public class DLABCaptureManager: NSObject, DLABInputCaptureDelegate {
+public class CaptureManager: NSObject, DLABInputCaptureDelegate {
     /* ============================================ */
     // MARK: - properties - Capturing
     /* ============================================ */
@@ -240,11 +240,11 @@ public class DLABCaptureManager: NSObject, DLABInputCaptureDelegate {
     public override init() {
         super.init()
         
-        // print("DLABCaptureManager.init")
+        // print("CaptureManager.init")
     }
     
     deinit {
-        // print("DLABCaptureManager.deinit")
+        // print("CaptureManager.deinit")
         
         captureStop()
     }

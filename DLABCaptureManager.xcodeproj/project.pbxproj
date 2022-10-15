@@ -13,7 +13,7 @@
 		16DC283F1F9C2C1C008AA3A2 /* CaptureWriter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 16DC283A1F9C2C1C008AA3A2 /* CaptureWriter.swift */; };
 		16DC28401F9C2C1C008AA3A2 /* CaptureTimecodeHelper.swift in Sources */ = {isa = PBXBuildFile; fileRef = 16DC283B1F9C2C1C008AA3A2 /* CaptureTimecodeHelper.swift */; };
 		16DC28411F9C2C1C008AA3A2 /* CaptureAudioPreview.swift in Sources */ = {isa = PBXBuildFile; fileRef = 16DC283C1F9C2C1C008AA3A2 /* CaptureAudioPreview.swift */; };
-		16DC28421F9C2C1C008AA3A2 /* DLABCaptureManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 16DC283D1F9C2C1C008AA3A2 /* DLABCaptureManager.swift */; };
+		16DC28421F9C2C1C008AA3A2 /* CaptureManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 16DC283D1F9C2C1C008AA3A2 /* CaptureManager.swift */; };
 		16DC28431F9C2C1C008AA3A2 /* VideoStyle.swift in Sources */ = {isa = PBXBuildFile; fileRef = 16DC283E1F9C2C1C008AA3A2 /* VideoStyle.swift */; };
 /* End PBXBuildFile section */
 
@@ -25,7 +25,7 @@
 		16DC283A1F9C2C1C008AA3A2 /* CaptureWriter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CaptureWriter.swift; sourceTree = "<group>"; };
 		16DC283B1F9C2C1C008AA3A2 /* CaptureTimecodeHelper.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CaptureTimecodeHelper.swift; sourceTree = "<group>"; };
 		16DC283C1F9C2C1C008AA3A2 /* CaptureAudioPreview.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CaptureAudioPreview.swift; sourceTree = "<group>"; };
-		16DC283D1F9C2C1C008AA3A2 /* DLABCaptureManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DLABCaptureManager.swift; sourceTree = "<group>"; };
+		16DC283D1F9C2C1C008AA3A2 /* CaptureManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CaptureManager.swift; sourceTree = "<group>"; };
 		16DC283E1F9C2C1C008AA3A2 /* VideoStyle.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VideoStyle.swift; sourceTree = "<group>"; };
 		16DC284C1F9C2D1E008AA3A2 /* DLABridging.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; path = DLABridging.framework; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
@@ -45,7 +45,7 @@
 		16B29FDC1F9C2FE0003D2D1D /* Source */ = {
 			isa = PBXGroup;
 			children = (
-				16DC283D1F9C2C1C008AA3A2 /* DLABCaptureManager.swift */,
+				16DC283D1F9C2C1C008AA3A2 /* CaptureManager.swift */,
 				16DC283E1F9C2C1C008AA3A2 /* VideoStyle.swift */,
 				16DC283A1F9C2C1C008AA3A2 /* CaptureWriter.swift */,
 				16DC283B1F9C2C1C008AA3A2 /* CaptureTimecodeHelper.swift */,
@@ -172,7 +172,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				16DC28401F9C2C1C008AA3A2 /* CaptureTimecodeHelper.swift in Sources */,
-				16DC28421F9C2C1C008AA3A2 /* DLABCaptureManager.swift in Sources */,
+				16DC28421F9C2C1C008AA3A2 /* CaptureManager.swift in Sources */,
 				16DC28431F9C2C1C008AA3A2 /* VideoStyle.swift in Sources */,
 				16DC283F1F9C2C1C008AA3A2 /* CaptureWriter.swift in Sources */,
 				16DC28411F9C2C1C008AA3A2 /* CaptureAudioPreview.swift in Sources */,
