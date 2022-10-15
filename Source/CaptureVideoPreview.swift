@@ -443,6 +443,11 @@ public class CaptureVideoPreview: NSView, CALayerDelegate {
                 sampleProductionSize = productionSize
                 
                 NSLog("INFO: Update video sample property.")
+                
+                // Apply new aspect ratio to sublayer
+                DispatchQueue.main.async {
+                    self.needsDisplay = true
+                }
             }
         }
     }
