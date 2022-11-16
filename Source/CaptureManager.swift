@@ -51,7 +51,7 @@ public class CaptureManager: NSObject, DLABInputCaptureDelegate {
     public var audioDepth :DLABAudioSampleType = .type16bitInteger
     
     /// Capture audio channels. 2 for Stereo. 8 or 16 for discrete.
-    ///
+    /// Set 8 to use with hdmiAudioChannels.
     /// Set 0 to disable audioCapture and audioPreview.
     public var audioChannels :UInt32 = 2
     
@@ -71,6 +71,12 @@ public class CaptureManager: NSObject, DLABInputCaptureDelegate {
             }
         }
     }
+    
+    /// Use HDMI audio channel order (L R C LFE Ls Rs Rls Rrs), instead of descrete. audioChannels should be 8.
+    public var hdmiAudioChannels :UInt32 = 0
+    
+    /// For HDMI audio channel order. Set true if (ch3,ch4) == (LFE, C), as reveresed order.
+    public var reverseCh3Ch4 :Bool = false
     
     /// True while audio capture is enabled
     public private(set) var audioCaptureEnabled :Bool = false
@@ -277,6 +283,14 @@ public class CaptureManager: NSObject, DLABInputCaptureDelegate {
                     try aSetting = device.createInputAudioSetting(of: audioDepth,
                                                                   channelCount: audioChannels,
                                                                   sampleRate: audioRate)
+                    
+                    // HDMI Audio support
+                    if let aSetting = aSetting, videoConnection == .HDMI, audioConnection == .embedded,
+                       audioChannels == 8, audioChannels >= hdmiAudioChannels, hdmiAudioChannels > 0 {
+                        // rebuild formatDescription to support HDMI Audio Channel order
+                        try aSetting.buildAudioFormatDescription(forHDMIAudioChannels: hdmiAudioChannels,
+                                                                 swap3chAnd4ch: reverseCh3Ch4)
+                    }
                 }
                 
                 // NOTE: AVAssetWriter Buggy behavior found...
