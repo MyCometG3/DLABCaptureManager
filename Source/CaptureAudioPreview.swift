@@ -450,11 +450,8 @@ class CaptureAudioPreview: NSObject {
         
         queueSync {
             if let audioQueue = self.audioQueue {
-                // Flush AudioQueue first
-                try? aqFlush()
-                
                 // Dispose AudioQueue
-                status = AudioQueueDispose(audioQueue, true)
+                status = AudioQueueDispose(audioQueue, false)
                 if status != 0 {
                     errDescription = "\(#function)) (\(#line))"
                     errReason = "ERROR: Failed to dispose AudioQueue (\(status))"
