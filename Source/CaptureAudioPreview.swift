@@ -128,6 +128,20 @@ class CaptureAudioPreview: NSObject {
             return nil
         }
         
+        // Apply AudioChannelLayout to AudioQueue if available
+        var aclSize :Int = 0
+        let aclPtr :UnsafePointer<AudioChannelLayout>? = CMAudioFormatDescriptionGetChannelLayout(audioFormatDescription,
+                                                                                                  sizeOut: &aclSize)
+        if let audioQueue = audioQueue, let aclPtr = aclPtr {
+            status = AudioQueueSetProperty(audioQueue,
+                                           kAudioQueueProperty_ChannelLayout,
+                                           aclPtr,
+                                           UInt32(aclSize))
+            if status != 0 {
+                return nil
+            }
+        }
+        
         // Create AudioQueueBuffer(s); Use resolution per second.
         if let audioQueue = audioQueue {
             let numFrames = UInt32(asbd.mSampleRate/resolution)
