@@ -2,7 +2,7 @@
 
 Simple AV Capture Swift API for DLABridging (Objective-C API).
 
-- __Requirement__: macOS 12.x, 11.x, 10.15, 10.14.
+- __Requirement__: macOS 13.x, 12.x, 11.x, 10.15, 10.14.
 - __Capture Device__: Blackmagic DeckLink devices.
 - __Restriction__: Compressed/Synchronized captures are not supported.
 - __Dependency__: DeckLinkAPI.framework from Blackmagic_Desktop_Video_Macintosh (11.4-11.7, 12.0-12.4)
@@ -19,6 +19,8 @@ NOTE: This framework is under development.
     import DLABCapturemanager
 
     var manager :DLABCaptureManager? = nil
+    var flag32BGRA :Bool = false
+    var flagHDMIAudioLayout :Bool = true
 
     if manager == nil {
       manager = DLABCaptureManager()
@@ -29,12 +31,12 @@ NOTE: This framework is under development.
       // Capture setting
       manager.sampleTimescale = 30000
       #if true
-        // HD-1080i, fieldDominance:upper, HDMI+RCA
+        // HD-1080i, fieldDominance:upper, HDMI+embedded
         manager.displayMode = .modeHD1080i5994
         manager.pixelFormat = .format10BitYUV
         manager.videoStyle = .HD_1920_1080_Full
         manager.videoConnection = .HDMI
-        manager.audioConnection = .analogRCA
+        manager.audioConnection = .embedded
         manager.fieldDetail = kCMFormatDescriptionFieldDetail_SpatialFirstLineEarly
       #else
         // SD-NTSC, fieldDominance:lower, sVideo+RCA
@@ -48,15 +50,32 @@ NOTE: This framework is under development.
       #endif
 
       // Convert pixelFormat of CMSampleBuffer
-      // manager.cvPixelFormat = kCVPixelFormatType_32BGRA
+      if flag32BGRA {
+        manager.cvPixelFormat = kCVPixelFormatType_32BGRA
+      }
 
       // Specify codec on recording
       manager.encodeProRes422 = false
-      manager.encodeVideoCodecType = kCMVideoCodecType_AppleProRes422LT
-      // manager.encodeVideoCodecType = kCMVideoCodecType_H264
+      // manager.encodeVideoCodecType = kCMVideoCodecType_AppleProRes422LT
+      manager.encodeVideoCodecType = kCMVideoCodecType_H264
+      manager.encodeAudio = true
 
       // Preview CALayer
-      manager.parentView = parentView
+      // manager.videoPreview = myCaptureVideoPreview
+
+      // Preview CocoaScreenPreview
+      manager.parentView = myCocoaScreenPreview
+
+      // Support HDMI audio channel layout
+      if manager.videoConnection == .HDMI,
+         manager.audioConnection == .embedded,
+         flagHDMIAudioLayout {
+          manager.audioChannels = 8     // Should be 8ch input
+          manager.hdmiAudioChannels = 6 // HDMI 5.1ch surround
+          manager.reverseCh3Ch4 = true  // For source that (ch3, ch4) == (LFE, C)
+      } else {
+          manager.hdmiAudioChannels = 0
+      }
 
       // Start capture
       manager.captureStart()
@@ -77,9 +96,9 @@ NOTE: This framework is under development.
     manager = nil
 
 #### Development environment
-- macOS 12.6 Monterey
-- Xcode 14.0
-- Swift 5.7.0
+- macOS 12.6.1 Monterey
+- Xcode 14.1
+- Swift 5.7.1
 
 #### License
 - The MIT License
