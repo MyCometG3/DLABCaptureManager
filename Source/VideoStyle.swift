@@ -237,7 +237,7 @@ public enum VideoStyle : String {
             AVVideoCleanApertureHeightKey : visibleHeight ,
             AVVideoCleanApertureHorizontalOffsetKey : horizontalOffset ,
             AVVideoCleanApertureVerticalOffsetKey : verticalOffset
-        ]
+        ] as [String : Any]
         
         // pasp
         videoOutputSettings[AVVideoPixelAspectRatioKey] = [
