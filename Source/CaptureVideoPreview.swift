@@ -314,7 +314,7 @@ public class CaptureVideoPreview: NSView, CALayerDelegate {
             let width :Int = CVPixelBufferGetWidth(pb)
             let height :Int = CVPixelBufferGetHeight(pb)
             let format :OSType = CVPixelBufferGetPixelFormatType(pb)
-            let alignment :Int = 16 // = 2^4 = 2 * sizeof(void*)
+            let alignment :Int = CVPixelBufferGetBytesPerRow(pb)
             let dict = [
                 kCVPixelBufferPixelFormatTypeKey: format as CFNumber,
                 kCVPixelBufferWidthKey: width as CFNumber,
