@@ -3,7 +3,7 @@
 //  DLABCaptureManager
 //
 //  Created by Takashi Mochizuki on 2017/09/16.
-//  Copyright © 2017-2022 MyCometG3. All rights reserved.
+//  Copyright © 2017-2023 MyCometG3. All rights reserved.
 //
 
 import Foundation
