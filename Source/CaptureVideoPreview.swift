@@ -205,13 +205,20 @@ public class CaptureVideoPreview: NSView, CALayerDelegate {
                     let statusOK :Bool = (vLayer.status != .failed)
                     let ready :Bool = vLayer.isReadyForMoreMediaData
                     if statusOK && ready {
+                        checkGAP(sampleBuffer)
+                        checkDelayed(sampleBuffer)
+                        
                         // Enqueue samplebuffer
                         vLayer.enqueue(sampleBuffer)
-                    } else if self.verbose {
-                        var eStr = ""
-                        if !statusOK { eStr += "StatusFailed " }
-                        if !ready { eStr += "NotReady " }
-                        NSLog("NOTICE: videoLayer is not ready to enqueue. \(eStr)")
+                    } else {
+                        if self.verbose {
+                            var eStr = ""
+                            if !statusOK { eStr += "StatusFailed " }
+                            if !ready { eStr += "NotReady " }
+                            NSLog("NOTICE: videoLayer is not ready to enqueue. \(eStr)")
+                        }
+                        
+                        flushImage()
                     }
                 }
             }
@@ -678,13 +685,20 @@ public class CaptureVideoPreview: NSView, CALayerDelegate {
     
     /// Experimental : Check Time GAP
     ///
-    /// - Parameter startTime: CMTime
-    private func checkGAP(_ startTime :CMTime) {
+    /// - Parameter sampleBuffer: CMSampleBuffer
+    private func checkGAP(_ sampleBuffer :CMSampleBuffer) {
+        let startTime :CMTime = CMSampleBufferGetPresentationTimeStamp(sampleBuffer)
+        let duration :CMTime = CMSampleBufferGetDuration(sampleBuffer)
+        let endTime :CMTime = CMTimeAdd(startTime, duration)
+        //let startInSec :Float64 = CMTimeGetSeconds(startTime)
+        //let durationInSec :Float64 = CMTimeGetSeconds(duration)
+        let endInSec :Float64 = CMTimeGetSeconds(endTime)
+        
         // Validate samplebuffer if time gap (lost sample) is detected
         var isGAP = false
-        do {
-            let compResult :Int32 = CMTimeCompare(startTime, prevEndTime)
-            if startTime.value > 0 && compResult != 0 {
+        if let vLayer = videoLayer, let timebase = vLayer.controlTimebase {
+            let tbTime = CMTimeGetSeconds(CMTimebaseGetTime(timebase))
+            if tbTime >= endInSec {
                 if verbose {
                     NSLog("NOTICE: GAP DETECTED!")
                 }
@@ -692,22 +706,33 @@ public class CaptureVideoPreview: NSView, CALayerDelegate {
                 isGAP = true
             }
         }
+        else { NSLog("!!!\(#line)") }
         
         if isGAP {
-            if let vLayer = videoLayer {
-                vLayer.flushAndRemoveImage()
-            }
-            else { NSLog("!!!\(#line)") }
+            flushImage()
         }
+    }
+    
+    /// Flush current image on videoLayer
+    private func flushImage() {
+        if let vLayer = videoLayer {
+            vLayer.flushAndRemoveImage()
+        }
+        else { NSLog("!!!\(#line)") }
     }
     
     /// Experimental : Check late arrival
     ///
     /// - Parameters:
-    ///   - startTime: CMTime
-    ///   - startInSec: Float64
     ///   - sampleBuffer: CMSampleBuffer
-    private func checkDelayed(_ startTime :CMTime, _ startInSec :Float64, _ sampleBuffer :CMSampleBuffer) {
+    private func checkDelayed(_ sampleBuffer :CMSampleBuffer) {
+        let startTime :CMTime = CMSampleBufferGetPresentationTimeStamp(sampleBuffer)
+        //let duration :CMTime = CMSampleBufferGetDuration(sampleBuffer)
+        //let endTime :CMTime = CMTimeAdd(startTime, duration)
+        let startInSec :Float64 = CMTimeGetSeconds(startTime)
+        //let durationInSec :Float64 = CMTimeGetSeconds(duration)
+        //let endInSec :Float64 = CMTimeGetSeconds(endTime)
+        
         // if sampleBuffer is delayed, mark it as "_DisplayImmediately".
         var isLate = false
         if let vLayer = videoLayer, let timebase = vLayer.controlTimebase {
@@ -723,15 +748,22 @@ public class CaptureVideoPreview: NSView, CALayerDelegate {
         else { NSLog("!!!\(#line)") }
         
         if isLate {
-            if let attachments :CFArray = CMSampleBufferGetSampleAttachmentsArray(sampleBuffer, createIfNecessary: true) {
-                let ptr :UnsafeRawPointer = CFArrayGetValueAtIndex(attachments, 0)
-                let dict = fromOpaque(ptr, CFMutableDictionary.self)
-                let key = toOpaque(kCMSampleAttachmentKey_DisplayImmediately)
-                let value = toOpaque(kCFBooleanTrue)
-                CFDictionaryAddValue(dict, key, value)
-            }
-            else { NSLog("!!!\(#line)") }
+            refreshImage(sampleBuffer)
         }
+    }
+    
+    /// Mark sampleBuffer as DisplayImmediately
+    ///
+    /// - Parameter sampleBuffer: CMSampleBuffer
+    private func refreshImage(_ sampleBuffer: CMSampleBuffer) {
+        if let attachments :CFArray = CMSampleBufferGetSampleAttachmentsArray(sampleBuffer, createIfNecessary: true) {
+            let ptr :UnsafeRawPointer = CFArrayGetValueAtIndex(attachments, 0)
+            let dict = fromOpaque(ptr, CFMutableDictionary.self)
+            let key = toOpaque(kCMSampleAttachmentKey_DisplayImmediately)
+            let value = toOpaque(kCFBooleanTrue)
+            CFDictionarySetValue(dict, key, value)
+        }
+        else { NSLog("!!!\(#line)") }
     }
     
     /// Experimental : Adjust timebase
@@ -906,9 +938,8 @@ public class CaptureVideoPreview: NSView, CALayerDelegate {
             }
             
             #if false
-            // Experimental
-            checkGAP(startTime)
-            checkDelayed(startTime, startInSec, sampleBuffer)
+            checkGAP(sampleBuffer)
+            checkDelayed(sampleBuffer)
             #endif
             
             if baseHostTime == 0 {
