@@ -10,7 +10,7 @@ import Foundation
 import CoreMedia
 import AudioToolbox
 
-class CaptureAudioPreview: NSObject {
+class CaptureAudioPreview: NSObject, @unchecked Sendable {
     /* ================================================ */
     // MARK: - private properties
     /* ================================================ */
@@ -79,6 +79,12 @@ class CaptureAudioPreview: NSObject {
     // MARK: - public init/deinit
     /* ================================================ */
     
+    struct UnsafeAudioQueueWrapper: @unchecked Sendable {
+        let asbd :AudioStreamBasicDescription
+        let aqRef :AudioQueueRef
+        let aqBufferRef :AudioQueueBufferRef
+    }
+    
     /// Prepare AudioQueue using specified audioFormatDescription
     ///
     /// - Parameter audioFormatDescription: CMAudioFormatDescription
@@ -100,11 +106,16 @@ class CaptureAudioPreview: NSObject {
         
         // Create AudioQueue
         var status :OSStatus = -1
-        let inCallbackBlock :AudioQueueOutputCallbackBlock = {(aqRef, aqBufRef) in
+        let inCallbackBlock :AudioQueueOutputCallbackBlock = {[asbd] (aqRef, aqBufRef) in
             // - We do not enqueue in callback here (= pull model).
             // - Separate enqueue() is used instead (= push model).
-            
-            self.queueAsync {
+            let wrapper = UnsafeAudioQueueWrapper(asbd: asbd,
+                                                  aqRef: aqRef,
+                                                  aqBufferRef: aqBufRef)
+            self.queueAsync { [wrapper] in
+                let asbd = wrapper.asbd
+                let aqBufRef = wrapper.aqBufferRef
+                
                 let count = self.numEnqueuedCountDec(false)
                 
                 // reset bytesize value of returned audioQueueBuffer
@@ -170,9 +181,10 @@ class CaptureAudioPreview: NSObject {
         }
         
         // Start AudioQueue instantly
-        queueAsync {
-            try? self.aqPrime()
-            try? self.aqStart()
+        queueAsync { [weak self] in
+            guard let self = self else { return }
+            try? aqPrime()
+            try? aqStart()
         }
         
         // print("AudioPreview.init")
@@ -204,7 +216,7 @@ class CaptureAudioPreview: NSObject {
     /// Process block in async
     ///
     /// - Parameter block: block to process
-    private func queueAsync(_ block :@escaping ()->Void) {
+    private func queueAsync(_ block :@escaping @Sendable ()->Void) {
         guard let queue = processingQueue else { return }
         
         if nil != DispatchQueue.getSpecific(key: processingQueueSpecificKey) {

@@ -10,13 +10,70 @@ import Foundation
 import AVFoundation
 import VideoToolbox
 
-class CaptureWriter: NSObject {
+// Definition of CaptureWriterConfig structure
+public struct CaptureWriterConfig: Sendable {
+    // prepare specified media track
+    public var useAudio: Bool = true
+    public var useVideo: Bool = true
+    public var useTimecode: Bool = false
+    
+    // Optional parameter
+    public var movieURL: URL? = nil
+    public var prefix: String? = nil
+    public var sourceVideoFormatDescription: CMFormatDescription? = nil
+    public var sourceAudioFormatDescription: CMFormatDescription? = nil
+    public var sampleTimescale: CMTimeScale = 0
+    public var fieldDetail: String? = nil // CFString? = nil
+    public var updateVideoSettings: ((@Sendable ([String:Any]) -> [String:Any]))? = nil
+    public var updateAudioSettings: ((@Sendable ([String:Any]) -> [String:Any]))? = nil
+    
+    // output encoding setting
+    public var encodeAudio: Bool = false
+    public var encodeAudioFormatID: AudioFormatID = kAudioFormatMPEG4AAC
+    public var encodeAudioBitrate: UInt = 256 * 1024
+    public var encodeVideo: Bool = true
+    public var encodeProRes422: Bool = true
+    public var encodeVideoCodecType: CMVideoCodecType? = kCMVideoCodecType_H264
+    public var encodeVideoBitrate: UInt = 0
+    public var encodeVideoFrameRate: Float = 30/1.001
+    public var videoStyle: VideoStyle = .SD_720_486_16_9
+    public var clapHOffset: Int = 0
+    public var clapVOffset: Int = 0
+    
+    public init() {}
+}
+
+fileprivate final class CaptureWriterCache: @unchecked Sendable {
+    private let lock = NSLock()
+    private func withLock<T>(_ block: () -> T) -> T {
+        lock.lock(); defer { lock.unlock() }
+        return block()
+    }
+    
+    private var isRecordingValue: Bool = false
+    
+    var isRecording: Bool {
+        withLock { isRecordingValue }
+    }
+    func updateIsRecording(_ value: Bool) {
+        withLock { isRecordingValue = value }
+    }
+}
+
+actor CaptureWriter: NSObject {
     /* ============================================ */
     // MARK: - readonly property
     /* ============================================ */
     
     /// True while recoding is running.
-    public private(set) var isRecording : Bool = false
+    public private(set) var isRecording : Bool {
+        get {
+            return cache.isRecording
+        }
+        set {
+            cache.updateIsRecording(newValue)
+        }
+    }
     /// Recording duration in sec.
     public private(set) var duration : Float64 = 0.0
     /// CMTime for start time.
@@ -25,6 +82,76 @@ class CaptureWriter: NSObject {
     public private(set) var endTime : CMTime = CMTime.zero
     /// Flag if starting CMTime is valid or not
     public private(set) var isInitialTSReady : Bool = false
+    
+    /* ============================================ */
+    // MARK: - Configuration API
+    /* ============================================ */
+    
+    /// Get current configuration as CaptureWriterConfig
+    public func getConfig() -> CaptureWriterConfig {
+        var config = CaptureWriterConfig()
+        
+        // prepare specified media track
+        config.useAudio = self.useAudio
+        config.useVideo = self.useVideo
+        config.useTimecode = self.useTimecode
+        
+        // Optional parameter
+        config.movieURL = self.movieURL
+        config.prefix = self.prefix
+        config.sourceVideoFormatDescription = self.sourceVideoFormatDescription
+        config.sourceAudioFormatDescription = self.sourceAudioFormatDescription
+        config.sampleTimescale = self.sampleTimescale
+        config.fieldDetail = self.fieldDetail as String?
+        config.updateVideoSettings = self.updateVideoSettings
+        config.updateAudioSettings = self.updateAudioSettings
+        
+        // output encoding setting
+        config.encodeAudio = self.encodeAudio
+        config.encodeAudioFormatID = self.encodeAudioFormatID
+        config.encodeAudioBitrate = self.encodeAudioBitrate
+        config.encodeVideo = self.encodeVideo
+        config.encodeProRes422 = self.encodeProRes422
+        config.encodeVideoCodecType = self.encodeVideoCodecType
+        config.encodeVideoBitrate = self.encodeVideoBitrate
+        config.encodeVideoFrameRate = self.encodeVideoFrameRate
+        config.videoStyle = self.videoStyle
+        config.clapHOffset = self.clapHOffset
+        config.clapVOffset = self.clapVOffset
+        
+        return config
+    }
+    
+    /// Apply configuration from CaptureWriterConfig
+    public func setConfig(_ config: CaptureWriterConfig) {
+        // prepare specified media track
+        self.useAudio = config.useAudio
+        self.useVideo = config.useVideo
+        self.useTimecode = config.useTimecode
+        
+        // Optional parameter
+        self.movieURL = config.movieURL
+        self.prefix = config.prefix
+        self.sourceVideoFormatDescription = config.sourceVideoFormatDescription
+        self.sourceAudioFormatDescription = config.sourceAudioFormatDescription
+        self.sampleTimescale = config.sampleTimescale
+        self.fieldDetail = config.fieldDetail as CFString?
+        self.updateVideoSettings = config.updateVideoSettings
+        self.updateAudioSettings = config.updateAudioSettings
+        
+        // output encoding setting
+        self.encodeAudio = config.encodeAudio
+        self.encodeAudioFormatID = config.encodeAudioFormatID
+        self.encodeAudioBitrate = config.encodeAudioBitrate
+        self.encodeVideo = config.encodeVideo
+        self.encodeProRes422 = config.encodeProRes422
+        self.encodeVideoCodecType = config.encodeVideoCodecType
+        self.encodeVideoBitrate = config.encodeVideoBitrate
+        self.encodeVideoFrameRate = config.encodeVideoFrameRate
+        self.videoStyle = config.videoStyle
+        self.clapHOffset = config.clapHOffset
+        self.clapVOffset = config.clapVOffset
+    }
     
     /* ============================================ */
     // MARK: - prepare specified media track
@@ -54,9 +181,9 @@ class CaptureWriter: NSObject {
     /// Optional: For interlaced encoding. Set kCMFormatDescriptionFieldDetail_XXX.
     public var fieldDetail : CFString? = nil
     /// Optional: customise video encode settings of AVAssetWriterInput.
-    public var updateVideoSettings : (([String:Any]) -> [String:Any])? = nil
+    public var updateVideoSettings : (@Sendable ([String:Any]) -> [String:Any])? = nil
     /// Optional: customise audio encode settings of AVAssetWriterInput.
-    public var updateAudioSettings : (([String:Any]) -> [String:Any])? = nil
+    public var updateAudioSettings : (@Sendable ([String:Any]) -> [String:Any])? = nil
     
     /* ============================================ */
     // MARK: - output encoding setting
@@ -98,12 +225,8 @@ class CaptureWriter: NSObject {
     /// Backend AVAssetWriterInput for timecode media
     private var avAssetWriterInputTimecode : AVAssetWriterInput? = nil
     
-    /// Processing dispatch queue
-    private var processingQueue :DispatchQueue? = nil
-    /// Processing dispatch queue label
-    private let processingQueueLabel = "writer"
-    /// Processing dispatch queue key
-    private let processingQueueSpecificKey = DispatchSpecificKey<Void>()
+    /// CaptureWriter cache w/ nonisolated func support
+    nonisolated private let cache = CaptureWriterCache()
     
     /* ============================================ */
     // MARK: - public init/deinit
@@ -117,8 +240,13 @@ class CaptureWriter: NSObject {
     
     deinit {
         // print("Writer.deinit")
+        precondition(cache.isRecording == false, "ERROR: CaptureWriter should be closed before deinit.")
         
-        closeSession()
+        /*
+         TODO: async operation is not allowed in deinit
+         
+         await closeSession()
+         */
     }
     
     /* ============================================ */
@@ -126,85 +254,44 @@ class CaptureWriter: NSObject {
     /* ============================================ */
     
     /// Start writing session
-    public func openSession() {
+    public func openSession() async {
         if isRecording {
-            closeSession()
+            await closeSession()
         }
         
-        // Prepare Processing DispatchQueue
-        if processingQueue == nil {
-            let queue = DispatchQueue(label:processingQueueLabel)
-            queue.setSpecific(key: processingQueueSpecificKey, value: ())
-            processingQueue = queue
-        }
-        
-        queueSync {
-            isRecording = startRecording()
-        }
+        isRecording = startRecording()
     }
     
     /// Stop writing session
-    public func closeSession() {
-        queueSync {
-            if isRecording {
-                stopRecording()
+    public func closeSession() async {
+        if isRecording {
+            await stopRecording()
+        }
+        
+        isRecording = false
+    }
+    
+    /// Append SampleBuffer asynchronously with UnsafeSampleBufferWrapper
+    /// - Parameter wrapper: UnsafeSampleBufferWrapper instance containing the sample buffer.
+    /// - Parameter mediaType: The media type of the sample buffer (video, audio, timecode).
+    public func appendSampleBufferAsync(wrapper: UnsafeSampleBufferWrapper, mediaType: AVMediaType) {
+        Task {
+            switch mediaType {
+            case .video:
+                writeVideoSampleBuffer(wrapper.sampleBuffer)
+            case .audio:
+                writeAudioSampleBuffer(wrapper.sampleBuffer)
+            case .timecode:
+                writeTimecodeSampleBuffer(wrapper.sampleBuffer)
+            default:
+                preconditionFailure("ERROR: Unsupported mediaType \(mediaType)")
             }
-            
-            isRecording = false
-        }
-    }
-    
-    /// Append Video SampleBuffer
-    public func appendVideoSampleBuffer(sampleBuffer :CMSampleBuffer) {
-        queueAsync {
-            self.writeVideoSampleBuffer(sampleBuffer)
-        }
-    }
-    
-    /// Append Audio SampleBuffer
-    public func appendAudioSampleBuffer(sampleBuffer :CMSampleBuffer) {
-        queueAsync {
-            self.writeAudioSampleBuffer(sampleBuffer)
-        }
-    }
-    
-    /// Append Timecode SampleBuffer
-    public func appendTimecodeSampleBuffer(sampleBuffer :CMSampleBuffer) {
-        queueAsync {
-            self.writeTimecodeSampleBuffer(sampleBuffer)
         }
     }
     
     /* ============================================ */
     // MARK: - Internal/Private func
     /* ============================================ */
-    
-    /// Process block in sync
-    ///
-    /// - Parameter block: block to process
-    private func queueSync(_ block :(()->Void)) {
-        guard let queue = processingQueue else { return }
-        
-        if nil != DispatchQueue.getSpecific(key: processingQueueSpecificKey) {
-            block()
-        } else {
-            queue.sync(execute: block)
-        }
-    }
-    
-    /// Process block in async
-    ///
-    /// - Parameter block: block to process
-    private func queueAsync(_ block :@escaping ()->Void) {
-        guard let queue = processingQueue else { return }
-        
-        if nil != DispatchQueue.getSpecific(key: processingQueueSpecificKey) {
-            queue.async(execute: block)
-            //block()
-        } else {
-            queue.async(execute: block)
-        }
-    }
     
     private func startRecording() -> Bool {
         if movieURL == nil {
@@ -240,7 +327,7 @@ class CaptureWriter: NSObject {
                 try fileManager.removeItem(atPath: url.path)
             }
         } catch {
-            print("ERROR: Failed to start recording")
+            print("ERROR: Failed to start recording", error.localizedDescription)
             return false
         }
         
@@ -279,7 +366,7 @@ class CaptureWriter: NSObject {
         return false
     }
     
-    private func stopRecording() {
+    private func stopRecording() async {
         if let avAssetWriter = avAssetWriter {
             // Finish writing
             if let avAssetWriterInputTimeCode = avAssetWriterInputTimecode {
@@ -296,33 +383,38 @@ class CaptureWriter: NSObject {
                 avAssetWriter.endSession(atSourceTime: endTime)
             }
             
-            let semaphore = DispatchSemaphore(value: 0)
-            
-            avAssetWriter.finishWriting(completionHandler: { () -> Void in
-                //
-                if let avAssetWriter = self.avAssetWriter {
-                    // Check if completed
-                    if avAssetWriter.status != .completed {
-                        // In case of faulty state
-                        let statusStr = self.descriptionForStatus(avAssetWriter.status)
-                        print("ERROR: AVAssetWriter.finishWriting(completionHandler:) = \(statusStr)")
-                        print("ERROR: \(avAssetWriter.error as Optional)")
+            await withCheckedContinuation { continuation in
+                avAssetWriter.finishWriting {
+                    Task { [weak self] in
+                        if let self = self {
+                            await handleFinishWriting()
+                        }
+                        continuation.resume()
                     }
-                    
-                    // Finalize TS variables and duration
-                    self.finalizeTimeStamp()
-                    
-                    // unref AVAssetWriter
-                    self.avAssetWriterInputTimecode = nil
-                    self.avAssetWriterInputVideo = nil
-                    self.avAssetWriterInputAudio = nil
-                    self.avAssetWriter = nil
-                    
-                    semaphore.signal()
                 }
-            })
-            semaphore.wait()
+            }
         }
+    }
+    
+    private func handleFinishWriting() {
+        guard let avAssetWriter = self.avAssetWriter else { return }
+        
+        // Check if completed
+        if avAssetWriter.status != .completed {
+            // In case of faulty state
+            let statusStr = self.descriptionForStatus(avAssetWriter.status)
+            print("ERROR: AVAssetWriter.finishWriting(completionHandler:) = \(statusStr)")
+            print("ERROR: \(avAssetWriter.error as Optional)")
+        }
+        
+        // Finalize TS variables and duration
+        self.finalizeTimeStamp()
+        
+        // unref AVAssetWriter
+        self.avAssetWriterInputTimecode = nil
+        self.avAssetWriterInputVideo = nil
+        self.avAssetWriterInputAudio = nil
+        self.avAssetWriter = nil
     }
     
     /* ============================================ */
@@ -330,7 +422,6 @@ class CaptureWriter: NSObject {
     /* ============================================ */
     
     private func initializeTimeStamp() {
-        objc_sync_enter(self)
         do {
             // reset TS variables and duration
             isInitialTSReady = false
@@ -338,11 +429,9 @@ class CaptureWriter: NSObject {
             endTime = CMTime.zero
             duration = 0.0
         }
-        objc_sync_exit(self)
     }
     
     private func updateTimeStamp(_ sampleBuffer: CMSampleBuffer) {
-        objc_sync_enter(self)
         do {
             // Update InitialTimeStamp and EndTimeStamp
             let sbPresentation = CMSampleBufferGetPresentationTimeStamp(sampleBuffer)
@@ -362,11 +451,9 @@ class CaptureWriter: NSObject {
             endTime = CMTimeAdd(sbPresentation, sbDuration)
             duration = CMTimeGetSeconds(CMTimeSubtract(endTime, startTime))
         }
-        objc_sync_exit(self)
     }
     
     private func finalizeTimeStamp() {
-        objc_sync_enter(self)
         do {
             // Calc duration and Reset CMTime values
             if isInitialTSReady == true {
@@ -379,7 +466,6 @@ class CaptureWriter: NSObject {
             startTime = CMTime.zero
             endTime = CMTime.zero
         }
-        objc_sync_exit(self)
     }
     
     /* ============================================ */
@@ -732,14 +818,13 @@ class CaptureWriter: NSObject {
         let c2 : UInt32 = (type >> 16) & 0xFF
         let c3 : UInt32 = (type >>  8) & 0xFF
         let c4 : UInt32 = (type      ) & 0xFF
-        let bytes: [CChar] = [
-            CChar( c1 == 0x00 ? 0x20 : c1),
-            CChar( c2 == 0x00 ? 0x20 : c2),
-            CChar( c3 == 0x00 ? 0x20 : c3),
-            CChar( c4 == 0x00 ? 0x20 : c4),
-            CChar(0x00)
+        let bytes: [UInt8] = [
+            UInt8( c1 == 0x00 ? 0x20 : c1),
+            UInt8( c2 == 0x00 ? 0x20 : c2),
+            UInt8( c3 == 0x00 ? 0x20 : c3),
+            UInt8( c4 == 0x00 ? 0x20 : c4)
         ]
-        
-        return String(cString: bytes)
+        let fourCCString = String(decoding: bytes, as: UTF8.self)
+        return fourCCString
     }
 }

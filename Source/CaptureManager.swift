@@ -7,10 +7,21 @@
 //
 
 import Cocoa
-import DLABridging
+@preconcurrency import DLABridging
+
+/// Sendable SampleBuffer wrapper
+public struct UnsafeSampleBufferWrapper: @unchecked Sendable {
+    let sampleBuffer :CMSampleBuffer
+}
+
+public struct UnsafeSampleBufferInfo: @unchecked Sendable {
+    var sampleBuffer: CMSampleBuffer
+    var setting: DLABTimecodeSetting?
+    var sender: DLABDevice
+}
 
 /// Specify preferred timecodeSource.
-public enum TimecodeType :Int {
+public enum TimecodeType :Int, Sendable {
     ///  SERIAL: validate on DLABTimecodeFormatSerial
     case SERIAL = 1
     ///  VITC: validate on DLABTimecodeFormatVITC/VITCField2
@@ -29,6 +40,52 @@ public enum TimecodeType :Int {
         default:
             return false
         }
+    }
+}
+
+extension CaptureManager: @unchecked Sendable {
+    
+    /// Executes an asynchronous, throwing operation synchronously on a detached task.
+    /// - Parameter block: A closure that performs asynchronous work.
+    /// - Returns: The result produced by the closure.
+    /// - Note: This is a workaround for async/await in non-actor contexts. This method is nonisolated to allow calling from any thread.
+    nonisolated func performAsync<T: Sendable>(_ block: @Sendable @escaping () async throws -> T) throws -> T {
+        let semaphore = DispatchSemaphore(value: 0)
+        let lock = DispatchQueue(label: "ResultLock")
+        var result: Result<T, Error>?
+        Task.detached(priority: .userInitiated) {
+            let taskResult: Result<T, Error>
+            do {
+                taskResult = .success(try await block())
+            } catch {
+                taskResult = .failure(error)
+            }
+            lock.sync {
+                result = taskResult
+            }
+            semaphore.signal()
+        }
+        semaphore.wait()
+        return try lock.sync { try result!.get() }
+    }
+    
+    /// Executes an asynchronous, non-throwing operation synchronously on a detached task.
+    /// - Parameter block: A closure that performs asynchronous work.
+    /// - Returns: The result produced by the closure.
+    /// - Note: This is a workaround for async/await in non-actor contexts. This method is nonisolated to allow calling from any thread.
+    nonisolated func performAsync<T: Sendable>(_ block: @Sendable @escaping () async -> T) -> T {
+        let semaphore = DispatchSemaphore(value: 0)
+        let lock = DispatchQueue(label: "ResultLock")
+        var result: T?
+        Task.detached(priority: .userInitiated) {
+            let taskResult = await block()
+            lock.sync {
+                result = taskResult
+            }
+            semaphore.signal()
+        }
+        semaphore.wait()
+        return lock.sync { result! }
     }
 }
 
@@ -151,10 +208,14 @@ public class CaptureManager: NSObject, DLABInputCaptureDelegate {
     
     /// Duration in sec of recording
     public var duration :Float64 {
-        if let writer = writer {
-            return writer.duration
-        } else {
-            return lastDuration
+        get {
+            if let writer = writer {
+                return performAsync {
+                    await writer.duration
+                }
+            } else {
+                return lastDuration
+            }
         }
     }
     
@@ -173,7 +234,7 @@ public class CaptureManager: NSObject, DLABInputCaptureDelegate {
     public var encodeAudioBitrate :UInt = 256*1024
     
     /// Optional: customise audio encode settings of AVAssetWriterInput.
-    public var updateAudioSettings : (([String:Any]) -> [String:Any])? = nil
+    public var updateAudioSettings : (@Sendable ([String:Any]) -> [String:Any])? = nil
     
     /* ============================================ */
     // MARK: - properties - Recording video
@@ -221,7 +282,7 @@ public class CaptureManager: NSObject, DLABInputCaptureDelegate {
     public var fieldDetail :CFString? = kCMFormatDescriptionFieldDetail_SpatialFirstLineLate
     
     /// Optional: customise video encode settings of AVAssetWriterInput.
-    public var updateVideoSettings : (([String:Any]) -> [String:Any])? = nil
+    public var updateVideoSettings : (@Sendable ([String:Any]) -> [String:Any])? = nil
     
     /* ============================================ */
     // MARK: - properties - Recording timecode
@@ -246,21 +307,47 @@ public class CaptureManager: NSObject, DLABInputCaptureDelegate {
     public override init() {
         super.init()
         
-        // print("CaptureManager.init")
+        print("CaptureManager.init")
     }
     
     deinit {
-        // print("CaptureManager.deinit")
+        print("CaptureManager.deinit")
+        precondition(running == false, "CaptureManager should be stopped before deinit")
         
-        captureStop()
+        /*
+         TODO: async operation is not allowed in deinit
+         
+         await captureStop()
+         */
     }
     
     /* ============================================ */
     // MARK: - public method
     /* ============================================ */
     
+    public func captureStartSync() {
+        performAsync { [weak self] in
+            guard let self = self else { return }
+            await captureStart()
+        }
+    }
+    
+    public func captureStopSync() {
+        performAsync { [weak self] in
+            guard let self = self else { return }
+            await captureStop()
+        }
+    }
+    
+    public func recordToggleSync() {
+        performAsync { [weak self] in
+            guard let self = self else { return }
+            await recordToggle()
+        }
+    }
+    
     /// Start Capture session
-    public func captureStart() {
+    public func captureStart() async {
         if currentDevice == nil {
             _ = findFirstDevice()
         }
@@ -332,7 +419,7 @@ public class CaptureManager: NSObject, DLABInputCaptureDelegate {
                         try device.setInputScreenPreviewTo(parentView)
                     }
                     if let videoPreview = videoPreview {
-                        videoPreview.prepare()
+                        await videoPreview.prepare()
                     }
                     
                     // Enable Video Capture
@@ -379,10 +466,10 @@ public class CaptureManager: NSObject, DLABInputCaptureDelegate {
     }
     
     /// Stop capture session
-    public func captureStop() {
+    public func captureStop() async {
         if let device = currentDevice, running == true {
             if recording {
-                recordToggle()
+                await recordToggle()
             }
             do {
                 // Stop stream
@@ -402,7 +489,7 @@ public class CaptureManager: NSObject, DLABInputCaptureDelegate {
                 
                 // Disable Preview
                 if let videoPreview = videoPreview {
-                    videoPreview.shutdown()
+                    await videoPreview.shutdown()
                 }
                 if let _ = parentView {
                     try device.setInputScreenPreviewTo(nil)
@@ -425,14 +512,14 @@ public class CaptureManager: NSObject, DLABInputCaptureDelegate {
     }
     
     /// Toggle recording using current session
-    public func recordToggle() {
+    public func recordToggle() async {
         if running {
             if let writer = writer {
                 // stop recording
-                writer.closeSession()
+                await writer.closeSession()
                 
                 // keep last duration
-                lastDuration = writer.duration
+                lastDuration = await writer.duration
                 
                 // unref writer
                 self.writer = nil
@@ -453,35 +540,39 @@ public class CaptureManager: NSObject, DLABInputCaptureDelegate {
                 
                 // start recording
                 if let writer = writer {
-                    writer.movieURL = movieURL
-                    writer.prefix = prefix
-                    writer.sampleTimescale = (sampleTimescale > 0 ? sampleTimescale : calcTimescale())
+                    // prepare CaptureWriterConfig
+                    var config = await writer.getConfig()
                     
-                    writer.encodeAudio = encodeAudio
-                    writer.encodeAudioFormatID = encodeAudioFormatID
-                    writer.encodeAudioBitrate = encodeAudioBitrate
-                    writer.updateAudioSettings = updateAudioSettings
+                    config.movieURL = movieURL
+                    config.prefix = prefix
+                    config.sampleTimescale = (sampleTimescale > 0 ? sampleTimescale : calcTimescale())
                     
-                    writer.videoStyle = videoStyle
-                    writer.clapHOffset = Int(offset.x)
-                    writer.clapVOffset = Int(offset.y)
-                    writer.encodeVideo = encodeVideo
-                    writer.encodeVideoBitrate = encodeVideoBitrate
-                    writer.encodeVideoFrameRate = calcFPS()
-                    writer.encodeProRes422 = encodeProRes422
-                    writer.encodeVideoCodecType = encodeVideoCodecType
-                    writer.fieldDetail = fieldDetail
-                    writer.updateVideoSettings = updateVideoSettings
+                    config.encodeAudio = encodeAudio
+                    config.encodeAudioFormatID = encodeAudioFormatID
+                    config.encodeAudioBitrate = encodeAudioBitrate
+                    config.updateAudioSettings = updateAudioSettings
                     
-                    writer.useTimecode = timecodeReady
+                    config.videoStyle = videoStyle
+                    config.clapHOffset = Int(offset.x)
+                    config.clapVOffset = Int(offset.y)
+                    config.encodeVideo = encodeVideo
+                    config.encodeVideoBitrate = encodeVideoBitrate
+                    config.encodeVideoFrameRate = calcFPS()
+                    config.encodeProRes422 = encodeProRes422
+                    config.encodeVideoCodecType = encodeVideoCodecType
+                    config.fieldDetail = fieldDetail as String?
+                    config.updateVideoSettings = updateVideoSettings
                     
-                    writer.sourceVideoFormatDescription =
-                        currentDevice?.inputVideoSetting?.videoFormatDescription
-                    writer.sourceAudioFormatDescription =
-                        currentDevice?.inputAudioSetting?.audioFormatDescription
-                    writer.openSession()
+                    config.useTimecode = timecodeReady
                     
-                    if writer.isRecording {
+                    config.sourceVideoFormatDescription = currentDevice?.inputVideoSetting?.videoFormatDescription
+                    config.sourceAudioFormatDescription = currentDevice?.inputAudioSetting?.audioFormatDescription
+                    
+                    // apply CaptureWriterConfig
+                    await writer.setConfig(config)
+                    await writer.openSession()
+                    
+                    if await writer.isRecording {
                         recording = true
                         // print("NOTICE: Recording started")
                     } else {
@@ -552,10 +643,24 @@ public class CaptureManager: NSObject, DLABInputCaptureDelegate {
     /// - Parameters:
     ///   - sampleBuffer: CMSampleBuffer
     ///   - sender: DLABDevice
-    public func processCapturedAudioSample(_ sampleBuffer: CMSampleBuffer,
-                                           of sender:DLABDevice) {
+    public nonisolated func processCapturedAudioSample(_ sampleBuffer: CMSampleBuffer,
+                                                       of sender:DLABDevice) {
+        let info = UnsafeSampleBufferInfo(sampleBuffer: sampleBuffer, setting: nil, sender: sender)
+        Task(priority: .high) {
+            await processCapturedAudioSampleAsync(info)
+        }
+    }
+    
+    /// Audio SampleBuffer callback - Enqueue immediately
+    /// - Parameter info: A wrapper for sampleBuffer and sender
+    private func processCapturedAudioSampleAsync(_ info: UnsafeSampleBufferInfo) async {
+        let sampleBuffer = info.sampleBuffer
+        
         if let writer = writer {
-            writer.appendAudioSampleBuffer(sampleBuffer: sampleBuffer)
+            let wrapper = UnsafeSampleBufferWrapper(sampleBuffer: sampleBuffer)
+            Task.detached {
+                await writer.appendSampleBufferAsync(wrapper: wrapper, mediaType: .audio)
+            }
         }
         if let audioPreview = audioPreview {
             if audioPreview.running == true {
@@ -572,30 +677,11 @@ public class CaptureManager: NSObject, DLABInputCaptureDelegate {
     /// - Parameters:
     ///   - sampleBuffer: CMSampleBuffer
     ///   - sender: DLABDevice
-    public func processCapturedVideoSample(_ sampleBuffer: CMSampleBuffer,
-                                           of sender:DLABDevice) {
-        if let writer = writer {
-            writer.appendVideoSampleBuffer(sampleBuffer: sampleBuffer)
-        }
-        
-        if let videoPreview = videoPreview {
-            videoPreview.queueSampleBuffer(sampleBuffer)
-        }
-        
-        // support for core_audio_smpte_time
-        if let timecodeSource = timecodeSource, timecodeSource == .CoreAudio, let timecodeHelper = timecodeHelper {
-            let timecodeSampleBuffer = timecodeHelper.createTimeCodeSample(from: sampleBuffer)
-            if let timecodeSampleBuffer = timecodeSampleBuffer {
-                if let writer = writer {
-                    writer.appendTimecodeSampleBuffer(sampleBuffer: timecodeSampleBuffer)
-                }
-                
-                // source provides timecode
-                if timecodeReady == false {
-                    timecodeReady = true
-                    print("NOTICE: timecodeReady : core_audio_smpte_time")
-                }
-            }
+    public nonisolated func processCapturedVideoSample(_ sampleBuffer: CMSampleBuffer,
+                                                       of sender:DLABDevice) {
+        let info = UnsafeSampleBufferInfo(sampleBuffer: sampleBuffer, setting: nil, sender: sender)
+        Task(priority: .high) {
+            await processCapturedVideoSampleAsync(info)
         }
     }
     
@@ -604,34 +690,79 @@ public class CaptureManager: NSObject, DLABInputCaptureDelegate {
     ///   - sampleBuffer: CMSampleBuffer
     ///   - setting: DLABTimecodeSetting
     ///   - sender: DLABDevice
-    public func processCapturedVideoSample(_ sampleBuffer: CMSampleBuffer,
-                                           timecodeSetting setting: DLABTimecodeSetting,
-                                           of sender:DLABDevice) {
+    public nonisolated func processCapturedVideoSample(_ sampleBuffer: CMSampleBuffer,
+                                                       timecodeSetting setting: DLABTimecodeSetting,
+                                                       of sender:DLABDevice) {
+        let info = UnsafeSampleBufferInfo(sampleBuffer: sampleBuffer, setting: setting, sender: sender)
+        Task(priority: .high) {
+            await processCapturedVideoSampleAsync(info)
+        }
+    }
+    
+    /// Video SampleBuffer callback - Enqueue immediately Or using DisplayLink
+    /// - Parameter info: Video SampleBuffer wrapper
+    private func processCapturedVideoSampleAsync(_ info: UnsafeSampleBufferInfo) async {
+        let sampleBuffer = info.sampleBuffer
+        let setting = info.setting
+        
         if let writer = writer {
-            writer.appendVideoSampleBuffer(sampleBuffer: sampleBuffer)
+            let wrapper = UnsafeSampleBufferWrapper(sampleBuffer: sampleBuffer)
+            Task.detached {
+                await writer.appendSampleBufferAsync(wrapper: wrapper, mediaType: .video)
+            }
         }
         
         if let videoPreview = videoPreview {
-            videoPreview.queueSampleBuffer(sampleBuffer)
+            let wrapper = UnsafeSampleBufferWrapper(sampleBuffer: sampleBuffer)
+            Task.detached {
+                await videoPreview.queueSampleBufferAsync(wrapper: wrapper)
+            }
         }
         
-        // support for Device timecode
-        if let timecodeSource = timecodeSource, timecodeSource.byDevice() {
-            let timecodeSampleBuffer = setting.createTimecodeSample(in: timecodeFormatType,
-                                                                    videoSample: sampleBuffer)
-            if let timecodeSampleBuffer = timecodeSampleBuffer {
-                if let writer = writer {
-                    writer.appendTimecodeSampleBuffer(sampleBuffer: timecodeSampleBuffer)
+        if let setting = setting {
+            // support for Device timecode
+            if let timecodeSource = timecodeSource, timecodeSource.byDevice() {
+                let timecodeSampleBuffer = setting.createTimecodeSample(in: timecodeFormatType,
+                                                                        videoSample: sampleBuffer)
+                if let timecodeSampleBuffer = timecodeSampleBuffer {
+                    if let writer = writer {
+                        let wrapper = UnsafeSampleBufferWrapper(sampleBuffer: timecodeSampleBuffer)
+                        Task.detached {
+                            await writer.appendSampleBufferAsync(wrapper: wrapper, mediaType: .timecode)
+                        }
+                    }
+                    
+                    // source provides timecode
+                    if timecodeReady == false {
+                        timecodeReady = true
+                        print("NOTICE: timecodeReady : \(timecodeSource)")
+                    }
                 }
-                
-                // source provides timecode
-                if timecodeReady == false {
-                    timecodeReady = true
-                    print("NOTICE: timecodeReady : \(timecodeSource)")
+            }
+        } else {
+            // support for core_audio_smpte_time
+            if let timecodeSource = timecodeSource, timecodeSource == .CoreAudio, let timecodeHelper = timecodeHelper {
+                let timecodeSampleBuffer = timecodeHelper.createTimeCodeSample(from: sampleBuffer)
+                if let timecodeSampleBuffer = timecodeSampleBuffer {
+                    if let writer = writer {
+                        let wrapper = UnsafeSampleBufferWrapper(sampleBuffer: timecodeSampleBuffer)
+                        Task.detached {
+                            await writer.appendSampleBufferAsync(wrapper: wrapper, mediaType: .timecode)
+                        }
+                    }
+                    
+                    // source provides timecode
+                    if timecodeReady == false {
+                        timecodeReady = true
+                        print("NOTICE: timecodeReady : core_audio_smpte_time")
+                    }
                 }
             }
         }
     }
+}
+
+extension CaptureManager {
     
     /* ============================================ */
     // MARK: - public utility
