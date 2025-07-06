@@ -10,7 +10,7 @@ import Cocoa
 import AVFoundation
 import CoreVideo
 
-/// Helper class to support CVDisplayLinkOutputHandler (nonisolated sync support)
+/// Thread safe backing store - works with deinit and nonisolated func.
 fileprivate final class CaptureVideoPreviewCache: @unchecked Sendable {
     private let lock = NSLock()
     private func withLock<T>(_ block: () -> T) -> T {
@@ -19,19 +19,40 @@ fileprivate final class CaptureVideoPreviewCache: @unchecked Sendable {
     }
     
     private var preparedValue: Bool = false
-    private var donotEnqueueValue: Bool = false
-    
     var prepared: Bool {
-        withLock { preparedValue }
+        get { withLock { preparedValue } }
+        set { withLock { preparedValue = newValue } }
     }
-    func updatePrepared(_ value: Bool) {
-        withLock { preparedValue = value }
-    }
+    private var donotEnqueueValue: Bool = false
     var donotEnqueue: Bool {
-        withLock { donotEnqueueValue }
+        get { withLock { donotEnqueueValue } }
+        set { withLock { donotEnqueueValue = newValue } }
     }
-    func updateDonotEnqueue(_ value: Bool) {
-        withLock { donotEnqueueValue = value }
+    private var verboseValue: Bool = false
+    var verbose: Bool {
+        get { withLock { verboseValue } }
+        set { withLock { verboseValue = newValue } }
+    }
+    private var debugLogValue: Bool = false
+    var debugLog: Bool {
+        get { withLock { debugLogValue } }
+        set { withLock { debugLogValue = newValue } }
+    }
+    
+    private var videoLayerValue: AVSampleBufferDisplayLayer? = nil
+    var videoLayer: AVSampleBufferDisplayLayer? {
+        get { withLock { videoLayerValue } }
+        set { withLock { videoLayerValue = newValue } }
+    }
+    private var caDisplayLinkValue: AnyObject? = nil
+    var caDisplayLink: AnyObject? {
+        get { withLock { caDisplayLinkValue } }
+        set { withLock { caDisplayLinkValue = newValue } }
+    }
+    private var displayLinkValue: CVDisplayLink? = nil
+    var displayLink :CVDisplayLink? {
+        get { withLock { displayLinkValue } }
+        set { withLock { displayLinkValue = newValue } }
     }
 }
 
@@ -42,7 +63,10 @@ public class CaptureVideoPreview: NSView, CALayerDelegate {
     /* ================================================ */
     
     /// Backing layer of AVSampleBufferDisplayLayer
-    public private(set) var videoLayer :AVSampleBufferDisplayLayer? = nil
+    public private(set) var videoLayer :AVSampleBufferDisplayLayer? {
+        get { cache.videoLayer }
+        set { cache.videoLayer = newValue }
+    }
     
     /// User preferred pixel aspect ratio. (1.0 = square pixel)
     public var customPixelAspectRatio :CGFloat? = nil
@@ -57,16 +81,21 @@ public class CaptureVideoPreview: NSView, CALayerDelegate {
     public private(set) var sampleProductionSize :CGSize? = nil
     
     /// Verbose mode (debugging purpose)
-    public var verbose :Bool = false
+    public var verbose :Bool {
+        get { cache.verbose }
+        set { cache.verbose = newValue }
+    }
+    
+    /// Debug mode
+    public var debugLog: Bool {
+        get { cache.debugLog }
+        set { cache.debugLog = newValue }
+    }
     
     /// Prepared or not
-    public var prepared :Bool {
-        get {
-            return cache.prepared
-        }
-        set {
-            cache.updatePrepared(newValue)
-        }
+    private var prepared :Bool {
+        get { cache.prepared }
+        set { cache.prepared = newValue }
     }
     
     /* ================================================ */
@@ -78,9 +107,6 @@ public class CaptureVideoPreview: NSView, CALayerDelegate {
     
     /// Initial value of hostTime offset in sec - used for media timebase
     private var baseOffsetInSec :Float64 = 0.0
-    
-    /// Debug mode
-    public let debugLog = false
     
     /// Enqueued hostTime
     private var lastQueuedHostTime :UInt64 = 0
@@ -101,21 +127,24 @@ public class CaptureVideoPreview: NSView, CALayerDelegate {
     
     /// Background queueing flag (Thread-safe)
     private var donotEnqueue: Bool {
-        get {
-            return cache.donotEnqueue
-        }
-        set {
-            cache.updateDonotEnqueue(newValue)
-        }
+        get { cache.donotEnqueue }
+        set { cache.donotEnqueue = newValue }
     }
     
     /// CADisplayLink
     /// - NOTE: CADisplayLink is undef before macOS 14.0.
     /// - NOTE: @available(macOS 14.0, *) does not work w/ stored property.
-    private var caDisplayLink: AnyObject? = nil // use AnyObject to avoid @available check
+    /// - NOTE: use AnyObject to avoid @available check
+    private var caDisplayLink: AnyObject? {
+        get { cache.caDisplayLink }
+        set { cache.caDisplayLink = newValue }
+    }
     
     /// CVDisplayLink
-    private var displayLink :CVDisplayLink? = nil
+    private var displayLink :CVDisplayLink? {
+        get { cache.displayLink }
+        set { cache.displayLink = newValue }
+    }
     
     /// Suspend DisplayLink on idle (experimental)
     private var suspendDisplayLinkOnIdle: Bool = false
@@ -146,7 +175,6 @@ public class CaptureVideoPreview: NSView, CALayerDelegate {
         super.init(coder: decoder)
         
         setup()
-        // setup() moved from awakeFromNib()
     }
     
     override public func awakeFromNib() {
@@ -156,13 +184,38 @@ public class CaptureVideoPreview: NSView, CALayerDelegate {
     }
     
     deinit {
-        precondition(cache.prepared == false, "CaptureVideoPreview should be shutdown before deinit.")
+        deinitHelper()
+    }
+    
+    nonisolated private func deinitHelper() {
+        printVerbose("CaptureVideoPreview.\(#function)")
+        if !cache.prepared {
+            return
+        }
         
-        /*
-         TODO: async operation is not allowed in deinit
-         
-         await cleanup()
-         */
+        cache.prepared = false
+        cache.donotEnqueue = true
+        
+        if let caDisplayLink = cache.caDisplayLink, #available(macOS 14.0, *) {
+            caDisplayLink.invalidate()
+            cache.caDisplayLink = nil
+        } else {
+            let notification = NSWindow.didChangeScreenNotification
+            NotificationCenter.default.removeObserver(self,
+                                                      name: notification,
+                                                      object: nil)
+            if let displayLink = cache.displayLink {
+                if CVDisplayLinkIsRunning(displayLink) {
+                    _ = CVDisplayLinkStop(displayLink)
+                }
+                cache.displayLink = nil
+            }
+        }
+        
+        if let videoLayer = cache.videoLayer {
+            videoLayer.removeFromSuperlayer()
+            cache.videoLayer = nil
+        }
     }
     
     override public var wantsUpdateLayer: Bool {
@@ -185,7 +238,7 @@ public class CaptureVideoPreview: NSView, CALayerDelegate {
     ///   - useDisplayLink: true to use DisplayLink, false to use instant enqueue.
     ///   - preferCADisplayLink: true to prefer CADisplayLink over CVDisplayLink
     /// - NOTE: CADisplayLink requires  macOS 14.0 or later.
-    public func prepareWithDisplayLink(_ useDisplayLink: Bool = true, _ preferCADisplayLink: Bool = true) {
+    public func prepareWithDisplayLink(useDisplayLink: Bool = true, preferCADisplayLink: Bool = true) {
         self.useDisplayLink = useDisplayLink
         self.preferCADisplayLink = preferCADisplayLink
         prepare()
@@ -193,15 +246,10 @@ public class CaptureVideoPreview: NSView, CALayerDelegate {
     
     /// Prepare videoPreview and CVDisplayLink.
     public func prepare() {
+        printVerbose("CaptureVideoPreview.\(#function)")
         if prepared {
-            if verbose {
-                print("CaptureVideoPreview.\(#function)")
-                print("NOTICE: CaptureVideoPreview is already prepared. (\(#function))")
-            }
+            printVerbose("NOTICE: CaptureVideoPreview is already prepared. (\(#function))")
             return
-        }
-        if verbose {
-            print("CaptureVideoPreview.\(#function)")
         }
         do {
             guard let baseLayer = layer else {
@@ -231,15 +279,10 @@ public class CaptureVideoPreview: NSView, CALayerDelegate {
     
     /// Shutdown videoPreview and CVDisplayLink.
     public func shutdown() {
+        printVerbose("CaptureVideoPreview.\(#function)")
         if !prepared {
-            if verbose {
-                print("CaptureVideoPreview.\(#function)")
-                print("NOTICE: CaptureVideoPreview is not prepared. (\(#function))")
-            }
+            printVerbose("NOTICE: CaptureVideoPreview is not prepared. (\(#function))")
             return
-        }
-        if verbose {
-            print("CaptureVideoPreview.\(#function)")
         }
         do {
             guard let videoLayer = videoLayer else {
@@ -277,7 +320,7 @@ public class CaptureVideoPreview: NSView, CALayerDelegate {
     /// - Parameter sb: Video CMSampleBuffer
     public nonisolated func queueSampleBuffer(_ sb: CMSampleBuffer) {
         let info = UnsafeSampleBufferWrapper(sampleBuffer: sb)
-        Task(priority: .high) { [weak self] in
+        Task { [weak self] in
             guard let self = self else { return }
             await self.queueSampleBufferAsync(info.sampleBuffer)
         }
@@ -293,10 +336,8 @@ public class CaptureVideoPreview: NSView, CALayerDelegate {
     /// - @discussion: If `useDisplayLink` is false, this function will enqueue sampleBuffer immediately to AVSampleBufferDisplayLayer.
     public func queueSampleBufferAsync(_ sb :CMSampleBuffer) async {
         if donotEnqueue {
-            if verbose {
-                print("CaptureVideoPreview.\(#function)")
-                print("NOTICE: DisplayLink is suspended. Ignore enqueue request. (\(#function))")
-            }
+            printVerbose("CaptureVideoPreview.\(#function)",
+                         "NOTICE: DisplayLink is suspended. Ignore enqueue request. (\(#function))")
             return
         }
         
@@ -313,10 +354,8 @@ public class CaptureVideoPreview: NSView, CALayerDelegate {
             sampleEncodedSize = sbHelper.sampleEncodedSize
             sampleCleanSize = sbHelper.sampleCleanSize
             sampleProductionSize = sbHelper.sampleProductionSize
-            if verbose {
-                print("CaptureVideoPreview.\(#function)")
-                print("INFO: Update video sample property.")
-            }
+            printVerbose("CaptureVideoPreview.\(#function)",
+                         "INFO: Update video sample property.")
         }
         
         // Debugging
@@ -330,7 +369,7 @@ public class CaptureVideoPreview: NSView, CALayerDelegate {
             let strStart = String(format:"%08.3f", startInSec)
             let strEnd = String(format:"%08.3f", endInSec)
             let strDuration = String(format:"%08.3f", durationInSec)
-            print("Enqueue: start(\(strStart)) end(\(strEnd)) dur(\(strDuration))")
+            printDebug("Enqueue: start(\(strStart)) end(\(strEnd)) dur(\(strDuration))")
         }
         
         // Initialize Timebase if this is first sampleBuffer
@@ -362,13 +401,11 @@ public class CaptureVideoPreview: NSView, CALayerDelegate {
                     newSampleBuffer = nil
                     
                 } else {
-                    if verbose {
-                        var eStr = ""
-                        if !statusOK { eStr += "StatusFailed " }
-                        if !ready { eStr += "NotReady " }
-                        print("CaptureVideoPreview.\(#function)")
-                        print("ERROR:(Instant queueing): videoLayer is not ready to enqueue. \(eStr)")
-                    }
+                    var eStr = ""
+                    if !statusOK { eStr += "StatusFailed " }
+                    if !ready { eStr += "NotReady " }
+                    printVerbose("CaptureVideoPreview.\(#function)",
+                                 "ERROR:(Instant queueing): videoLayer is not ready to enqueue. \(eStr)")
                     
                     flushImage()
                 }
@@ -402,47 +439,32 @@ public class CaptureVideoPreview: NSView, CALayerDelegate {
                 _ = CMTimebaseSetTime(timebase, time: CMTime.zero)
                 vLayer.controlTimebase = timebase
             } else {
-                if verbose {
-                    print("CaptureVideoPreview.\(#function)")
-                    print("ERROR: Failed to setup videoLayer's controlTimebase")
-                }
+                printVerbose("CaptureVideoPreview.\(#function)",
+                             "ERROR: Failed to setup videoLayer's controlTimebase")
             }
         } else {
-            if verbose {
-                print("CaptureVideoPreview.\(#function)")
-                print("ERROR: Failed to setup videoLayer.")
-            }
+            printVerbose("CaptureVideoPreview.\(#function)",
+                         "ERROR: Failed to setup videoLayer.")
         }
     }
     
-    /// clean up func
-    private func cleanup() {
-        shutdown()
-        
-        videoLayer = nil
+    nonisolated internal func printVerbose(_ message: String...) {
+        if cache.verbose {
+            let output = message.joined(separator: "\n")
+            print(output)
+        }
+    }
+    
+    nonisolated internal func printDebug(_ message: String...) {
+        if cache.debugLog {
+            let output = message.joined(separator: "\n")
+            print(output)
+        }
     }
     
     /* ================================================ */
     // MARK: - CALayerDelegate and more
     /* ================================================ */
-    
-    /// Runs a non-throwing `@MainActor`-isolated closure synchronously.
-    /// - Parameter block: A non-throwing closure isolated to the main actor.
-    /// - Returns: The result of the closure's operation.
-    /// - Warning: Blocks the calling thread if not already on the main thread, potentially causing UI freezes.
-    nonisolated func performSyncOnMainActor<T: Sendable>(_ block: @MainActor () -> T) -> T {
-        if Thread.isMainThread {
-            return MainActor.assumeIsolated {
-                block()
-            }
-        } else {
-            return DispatchQueue.main.sync {
-                return MainActor.assumeIsolated {
-                    block()
-                }
-            }
-        }
-    }
     
     /// Wrapper for CALayer to use in nonisolated context
     private struct UnsafeLayerWrapper: @unchecked Sendable {
@@ -453,14 +475,14 @@ public class CaptureVideoPreview: NSView, CALayerDelegate {
     /// - Parameter targetLayer: target CALayer to layout
     nonisolated public func layoutSublayers(of targetLayer: CALayer) {
         let targetLayerWrapper = UnsafeLayerWrapper(layer: targetLayer)
-        performSyncOnMainActor {
+        Task { @MainActor in
             let targetLayer = targetLayerWrapper.layer
             layoutSublayersCore(of: targetLayer)
         }
     }
     
     /// Perform layoutSublayersCore on MainActor
-    /// - Parameter block: block to perform
+    /// - Parameter targetLayer: target CALayer to layout
     private func layoutSublayersCore(of targetLayer: CALayer) {
         if let baseLayer = layer, let vLayer = videoLayer {
             if targetLayer == baseLayer {
@@ -478,10 +500,8 @@ public class CaptureVideoPreview: NSView, CALayerDelegate {
                     vLayer.videoGravity = .resize
                     CATransaction.commit()
                     
-                    if debugLog {
-                        print("CaptureVideoPreview.\(#function)")
-                        print("\(#function): \(layerSize.debugDescription)")
-                    }
+                    printDebug("CaptureVideoPreview.\(#function)",
+                               layerSize.debugDescription)
                 }
             }
         }
@@ -530,9 +550,7 @@ public class CaptureVideoPreview: NSView, CALayerDelegate {
     ///
     /// - Parameter sampleBuffer: timebase source sampleBuffer. Set nil to reset to shutdown.
     private func resetTimebase(_ sampleBuffer :CMSampleBuffer?) {
-        if verbose {
-            print("CaptureVideoPreview.\(#function)")
-        }
+        printVerbose("CaptureVideoPreview.\(#function)")
         do {
             if let sampleBuffer = sampleBuffer {
                 // start Media Time from sampleBuffer's presentation time
@@ -560,15 +578,13 @@ public class CaptureVideoPreview: NSView, CALayerDelegate {
         if debugLog {
             let baseHostTimeInSecStr = String(format:"%012.3f", timeIntervalFromHostTime(baseHostTime))
             let baseOffsetInSecStr = String(format:"%08.3f", baseOffsetInSec)
-            print("NOTICE:\(#function) baseHostTime(s) = \(baseHostTimeInSecStr), baseOffset(s) = \(baseOffsetInSecStr)")
+            printDebug("NOTICE:\(#function) baseHostTime(s) = \(baseHostTimeInSecStr), baseOffset(s) = \(baseOffsetInSecStr)")
         }
     }
     
     /// Flush current image on videoLayer
     private func flushImage() {
-        if verbose {
-            print("CaptureVideoPreview.\(#function)")
-        }
+        printVerbose("CaptureVideoPreview.\(#function)")
         if let vLayer = videoLayer {
             vLayer.flushAndRemoveImage()
         }
@@ -582,9 +598,7 @@ public class CaptureVideoPreview: NSView, CALayerDelegate {
     /// Setup DisplayLink
     /// @discussion Under macOS 14.0 and later, CADisplayLink is used instead of CVDisplayLink.
     private func prepareDisplayLink() {
-        if verbose {
-            print("CaptureVideoPreview.\(#function)")
-        }
+        printVerbose("CaptureVideoPreview.\(#function)")
         donotEnqueue = false
         
         if preferCADisplayLink, #available(macOS 14.0, *) {
@@ -613,9 +627,7 @@ public class CaptureVideoPreview: NSView, CALayerDelegate {
                 
                 if cache.donotEnqueue {
                     Task { @MainActor in
-                        if verbose {
-                            print("NOTICE: DisplayLink is suspended. Ignore enqueue request (\(#function))")
-                        }
+                        printVerbose("NOTICE: DisplayLink is suspended. Ignore enqueue request (\(#function))")
                     }
                     return kCVReturnError
                 }
@@ -627,7 +639,7 @@ public class CaptureVideoPreview: NSView, CALayerDelegate {
                 let expiredTimestamp = nextVSync + refreshInterval // next frame expired
                 
                 // Schedule enqueue on MainActor
-                Task(priority: .high) { @MainActor in
+                Task { @MainActor in
                     enqueue(targetTimestamp, expiredTimestamp)
                 }
                 return kCVReturnSuccess
@@ -674,10 +686,8 @@ public class CaptureVideoPreview: NSView, CALayerDelegate {
     ///  - Returns: True if sampleBuffer is enqueued, false if not.
     private func enqueue(_ targetTimestamp: CFTimeInterval, _ expiredTimestamp: CFTimeInterval) -> Bool {
         if donotEnqueue {
-            if verbose {
-                print("CaptureVideoPreview.\(#function)")
-                print("NOTICE: DisplayLink is suspended. Ignore enqueue request (\(#function))")
-            }
+            printVerbose("CaptureVideoPreview.\(#function)",
+                         "NOTICE: DisplayLink is suspended. Ignore enqueue request (\(#function))")
             return false
         }
         
@@ -724,8 +734,8 @@ public class CaptureVideoPreview: NSView, CALayerDelegate {
                     
                     let targetTimestampStr = String(format: "%012.3f", targetTimestamp)
                     
-                    print("CaptureVideoPreview.\(#function)")
-                    print("NOTICE:\(targetTimestampStr): enqueue start(\(strStart)) end(\(strEnd)) dur(\(strDuration)) mediaTime(\(mediaTimeInSecStr):\(missedStr):\(outdatedStr))")
+                    printDebug("CaptureVideoPreview.\(#function)",
+                               "NOTICE:\(targetTimestampStr): enqueue start(\(strStart)) end(\(strEnd)) dur(\(strDuration)) mediaTime(\(mediaTimeInSecStr):\(missedStr):\(outdatedStr))")
                 }
                 
                 // Release enqueued CMSampleBuffer
@@ -739,16 +749,16 @@ public class CaptureVideoPreview: NSView, CALayerDelegate {
                 if !statusOK { eStr += "StatusFailed " }
                 if !ready { eStr += "NotReady " }
                 let targetTimestampStr = String(format: "%012.3f", targetTimestamp)
-                print("CaptureVideoPreview.\(#function)")
-                print("ERROR:\(targetTimestampStr): videoLayer is not ready to enqueue. \(eStr)")
+                printDebug("CaptureVideoPreview.\(#function)",
+                           "ERROR:\(targetTimestampStr): videoLayer is not ready to enqueue. \(eStr)")
             }
             
             flushImage()
         } else {
             if debugLog {
                 let targetTimestampStr = String(format: "%012.3f", targetTimestamp)
-                print("CaptureVideoPreview.\(#function)")
-                print("NOTICE:\(targetTimestampStr): No sampleBuffer to enqueue. ")
+                printDebug("CaptureVideoPreview.\(#function)",
+                           "NOTICE:\(targetTimestampStr): No sampleBuffer to enqueue. ")
             }
         }
         
@@ -758,20 +768,19 @@ public class CaptureVideoPreview: NSView, CALayerDelegate {
             let idleTime = CVGetCurrentHostTime() - lastQueuedHostTime
             let idleTimeInSec = timeIntervalFromHostTime(idleTime)
             if idleTimeInSec > FREEWHEELING_PERIOD_IN_SECONDS {
-                if verbose {
-                    let targetTimestampStr = String(format: "%012.3f", targetTimestamp)
-                    let idleTimeInSecStr = String(format: "%08.3f", idleTimeInSec)
-                    print("CaptureVideoPreview.\(#function)")
-                    print("NOTICE:\(targetTimestampStr):\(idleTimeInSecStr): No enqueue - Consider to suspend DisplayLink.")
-                }
-                //_ = suspendDisplayLink()
+                let targetTimestampStr = String(format: "%012.3f", targetTimestamp)
+                let idleTimeInSecStr = String(format: "%08.3f", idleTimeInSec)
+                printVerbose("CaptureVideoPreview.\(#function)",
+                             "NOTICE:\(targetTimestampStr):\(idleTimeInSecStr): No enqueue - Consider to suspend DisplayLink.")
+                
+                _ = suspendDisplayLink()
             }
             else {
                 if debugLog {
                     let targetTimestampStr = String(format: "%012.3f", targetTimestamp)
                     let idleTimeInSecStr = String(format: "%08.3f", idleTimeInSec)
-                    print("CaptureVideoPreview.\(#function)")
-                    print("NOTICE:\(targetTimestampStr):\(idleTimeInSecStr): No enqueue.")
+                    printDebug("CaptureVideoPreview.\(#function)",
+                               "NOTICE:\(targetTimestampStr):\(idleTimeInSecStr): No enqueue.")
                 }
             }
         }
@@ -780,9 +789,7 @@ public class CaptureVideoPreview: NSView, CALayerDelegate {
     
     /// Shutdown DisplayLink and release resources.
     private func shutdownDisplayLink() {
-        if verbose {
-            print("CaptureVideoPreview.\(#function)")
-        }
+        printVerbose("CaptureVideoPreview.\(#function)")
         // Avoid enqueueing prior to suspend DisplayLink
         donotEnqueue = true
         newSampleBuffer = nil
@@ -878,9 +885,7 @@ public class CaptureVideoPreview: NSView, CALayerDelegate {
     
     /// Update linked CGDirectDisplayID with current view's displayID.
     @objc private func updateDisplayLink() {
-        if verbose {
-            print("CaptureVideoPreview.\(#function)")
-        }
+        printVerbose("CaptureVideoPreview.\(#function)")
         do {
             if let displayLink = displayLink {
                 let linkedDisplayID = CVDisplayLinkGetCurrentCGDisplay(displayLink)
@@ -967,423 +972,5 @@ public class CaptureVideoPreview: NSView, CALayerDelegate {
             return CMTimeGetSeconds(valueInCMTime)
         }
         return nil
-    }
-}
-
-/* ================================================ */
-// MARK: - Video SampleBuffer Helper
-/* ================================================ */
-
-fileprivate final class VideoSampleBufferHelper: @unchecked Sendable {
-    /* ================================================ */
-    // MARK: - public properties
-    /* ================================================ */
-    
-    /// sampleBuffer native pixel aspect ratio (pasp ImageDescription Extension)
-    public private(set) var sampleAspectRatio :CGFloat? = nil
-    /// image size of encoded rect
-    public private(set) var sampleEncodedSize :CGSize? = nil
-    /// image size of clean aperture (aspect ratio applied)
-    public private(set) var sampleCleanSize : CGSize? = nil
-    /// image size of encoded rect (aspect ratio applied)
-    public private(set) var sampleProductionSize :CGSize? = nil
-    
-    /* ================================================ */
-    // MARK: - private properties
-    /* ================================================ */
-    
-    /// CVPixelBufferPool
-    private var pixelBufferPool :CVPixelBufferPool? = nil
-    
-    /* ================================================ */
-    // MARK: - public functions (duplicate sampleBuffer)
-    /* ================================================ */
-    
-    /// Duplicate CMSampleBuffer with new CVPixelBuffer.
-    /// - Parameter sbwIn: source UnsafeSampleBufferWrapper
-    /// - Returns: new UnsafeSampleBufferWrapper with duplicated CVPixelBuffer
-    public func deeperCopyVideoSampleBufferAsync(sbwIn :UnsafeSampleBufferWrapper) async -> UnsafeSampleBufferWrapper? {
-        var sbwOut: UnsafeSampleBufferWrapper? = nil
-        sbwOut = await Task.detached(priority: .userInitiated) { [weak self] in
-            guard let self = self else { return nil }
-            
-            let sbIn = sbwIn.sampleBuffer
-            
-            // Duplicate CMSampleBuffer with new CVPixelBuffer
-            let sbOut:CMSampleBuffer? = self.deeperCopyVideoSampleBuffer(sbIn: sbIn)
-            if let sbOut = sbOut {
-                // Create new UnsafeSampleBufferWrapper
-                return UnsafeSampleBufferWrapper(sampleBuffer: sbOut)
-            } else {
-                // Return nil if copy failed
-                return nil
-            }
-        }.value
-        return sbwOut
-    }
-    
-    /// Duplicate CMSampleBuffer with new CVPixelBuffer.
-    /// - Parameter sbIn: source CMSampleBuffer
-    /// - Returns: new CMSampleBuffer with duplicated CVPixelBuffer
-    public func deeperCopyVideoSampleBuffer(sbIn :CMSampleBuffer) -> CMSampleBuffer? {
-        var fdOut :CMFormatDescription? = nil
-        var pbOut :CVPixelBuffer? = nil
-        var sbOut :CMSampleBuffer? = nil
-        
-        // Duplicate CMFormatDescription
-        let fd :CMFormatDescription? = CMSampleBufferGetFormatDescription(sbIn)
-        if let fd = fd {
-            let dim :CMVideoDimensions = CMVideoFormatDescriptionGetDimensions(fd)
-            let subType :CMVideoCodecType = CMFormatDescriptionGetMediaSubType(fd)
-            let ext :CFDictionary? = CMFormatDescriptionGetExtensions(fd)
-            CMVideoFormatDescriptionCreate(allocator: kCFAllocatorDefault,
-                                           codecType: subType, width: dim.width, height: dim.height, extensions: ext,
-                                           formatDescriptionOut: &fdOut)
-        }
-        
-        // Duplicate CVPixelBuffer
-        let pb :CVPixelBuffer? = CMSampleBufferGetImageBuffer(sbIn)
-        if let pb = pb {
-            duplicatePixelBuffer(pb, &pbOut)
-        }
-        
-        // Create new CMSampleBuffer
-        if let fd = fdOut, let pb = pbOut {
-            let dict = CMFormatDescriptionGetExtensions(fd)
-            CVBufferSetAttachments(pb, dict!, .shouldPropagate)
-            
-            var timeInfo = CMSampleTimingInfo()
-            CMSampleBufferGetSampleTimingInfo(sbIn, at: 0, timingInfoOut: &timeInfo)
-            
-            CMSampleBufferCreateReadyWithImageBuffer(allocator: kCFAllocatorDefault,
-                                                     imageBuffer: pb,
-                                                     formatDescription: fd,
-                                                     sampleTiming: &timeInfo,
-                                                     sampleBufferOut: &sbOut)
-        }
-        
-        return sbOut
-    }
-    
-    /* ================================================ */
-    // MARK: - private functions (duplicate pixelBuffer)
-    /* ================================================ */
-    
-    /// Duplicate CVPixelBuffer using CVPixelBufferPool.
-    /// - Parameters:
-    ///  - pb: source CVPixelBuffer
-    ///  - pbOut: output CVPixelBuffer
-    private func duplicatePixelBuffer(_ pb: CVPixelBuffer, _ pbOut: inout CVBuffer?) {
-        let width :Int = CVPixelBufferGetWidth(pb)
-        let height :Int = CVPixelBufferGetHeight(pb)
-        let format :OSType = CVPixelBufferGetPixelFormatType(pb)
-        let alignment :Int = CVPixelBufferGetBytesPerRow(pb)
-        let dict = [
-            kCVPixelBufferPixelFormatTypeKey: format as CFNumber,
-            kCVPixelBufferWidthKey: width as CFNumber,
-            kCVPixelBufferHeightKey: height as CFNumber,
-            kCVPixelBufferBytesPerRowAlignmentKey: alignment as CFNumber,
-            kCVPixelBufferIOSurfacePropertiesKey: [:] as [CFString : Any],
-        ] as [CFString : Any] as CFDictionary
-        if let pool = pixelBufferPool, let pbAttr = CVPixelBufferPoolGetPixelBufferAttributes(pool) {
-            // Check if pixelBufferPool is compatible or not
-            let typeOK = equalCFNumberInDictionary(dict, pbAttr, kCVPixelBufferPixelFormatTypeKey)
-            let widthOK = equalCFNumberInDictionary(dict, pbAttr, kCVPixelBufferWidthKey)
-            let heightOK = equalCFNumberInDictionary(dict, pbAttr, kCVPixelBufferHeightKey)
-            let strideOK = equalCFNumberInDictionary(dict, pbAttr, kCVPixelBufferBytesPerRowAlignmentKey)
-            if !(typeOK && widthOK && heightOK && strideOK) {
-                CVPixelBufferPoolFlush(pool, .excessBuffers)
-                self.pixelBufferPool = nil
-            }
-        }
-        if pixelBufferPool == nil {
-            let poolAttr = [
-                kCVPixelBufferPoolMinimumBufferCountKey: 4 as CFNumber
-            ] as CFDictionary
-            let err = CVPixelBufferPoolCreate(kCFAllocatorDefault, poolAttr, dict, &pixelBufferPool)
-            precondition(err == kCVReturnSuccess, "ERROR: Failed to create CVPixelBufferPool")
-        }
-        if let pixelBufferPool = pixelBufferPool {
-            CVPixelBufferPoolCreatePixelBuffer(kCFAllocatorDefault, pixelBufferPool, &pbOut)
-        }
-        
-        if let pbOut = pbOut {
-            CVPixelBufferLockBaseAddress(pb, .readOnly)
-            CVPixelBufferLockBaseAddress(pbOut, [])
-            if CVPixelBufferIsPlanar(pbOut) {
-                let numPlane = CVPixelBufferGetPlaneCount(pbOut)
-                for plane in 0..<numPlane {
-                    let src = CVPixelBufferGetBaseAddressOfPlane(pb, plane)
-                    let dst = CVPixelBufferGetBaseAddressOfPlane(pbOut, plane)
-                    let height = CVPixelBufferGetHeightOfPlane(pb, plane)
-                    let stride = CVPixelBufferGetBytesPerRowOfPlane(pb, plane)
-                    memcpy(dst, src, height*stride)
-                }
-            } else {
-                let src = CVPixelBufferGetBaseAddress(pb)
-                let dst = CVPixelBufferGetBaseAddress(pbOut)
-                let height = CVPixelBufferGetHeight(pb)
-                let stride = CVPixelBufferGetBytesPerRow(pb)
-                memcpy(dst, src, height*stride)
-            }
-            CVPixelBufferUnlockBaseAddress(pb, .readOnly)
-            CVPixelBufferUnlockBaseAddress(pbOut, [])
-        }
-    }
-    
-    /* ================================================ */
-    // MARK: - public functions (sampleBuffer attachments)
-    /* ================================================ */
-    
-    /// Mark sampleBuffer as DisplayImmediately
-    /// - Parameter sbwIn: UnsafeSampleBufferWrapper
-    /// @discussion: This will force sampleBuffer to be displayed immediately.
-    public func refreshImage(_ sbwIn :UnsafeSampleBufferWrapper) {
-        let sbIn = sbwIn.sampleBuffer
-        refreshImage(sbIn)
-    }
-    
-    /// Mark sampleBuffer as DoNotDisplay
-    /// - Parameter sbwIn: UnsafeSampleBufferWrapper
-    /// @discussion: This will force sampleBuffer to be skipped.
-    public func donotDisplayImage(_ sbwIn :UnsafeSampleBufferWrapper) {
-        let sbIn = sbwIn.sampleBuffer
-        donotDisplayImage(sbIn)
-    }
-    
-    /// Mark sampleBuffer as DisplayImmediately
-    ///
-    /// - Parameter sampleBuffer: CMSampleBuffer
-    /// @discussion: This will force sampleBuffer to be displayed immediately.
-    public func refreshImage(_ sampleBuffer: CMSampleBuffer) {
-        if let attachments :CFArray = CMSampleBufferGetSampleAttachmentsArray(sampleBuffer, createIfNecessary: true) {
-            let ptr :UnsafeRawPointer = CFArrayGetValueAtIndex(attachments, 0)
-            let dict = fromOpaque(ptr, CFMutableDictionary.self)
-            let key = toOpaque(kCMSampleAttachmentKey_DisplayImmediately)
-            let value = toOpaque(kCFBooleanTrue)
-            CFDictionarySetValue(dict, key, value)
-        }
-        else { preconditionFailure("attachments is nil") }
-    }
-    
-    /// Mark sampleBuffer as DoNotDisplay
-    ///
-    /// - Parameter sampleBuffer: CMSampleBuffer
-    /// @discussion: This will prevent sampleBuffer from being displayed.
-    public func donotDisplayImage(_ sampleBuffer: CMSampleBuffer) {
-        if let attachments :CFArray = CMSampleBufferGetSampleAttachmentsArray(sampleBuffer, createIfNecessary: true) {
-            let ptr :UnsafeRawPointer = CFArrayGetValueAtIndex(attachments, 0)
-            let dict = fromOpaque(ptr, CFMutableDictionary.self)
-            let key = toOpaque(kCMSampleAttachmentKey_DoNotDisplay)
-            let value = toOpaque(kCFBooleanFalse)
-            CFDictionarySetValue(dict, key, value)
-        }
-        else { preconditionFailure("attachments is nil") }
-    }
-    
-    /* ================================================ */
-    // MARK: - public functions (sampleBuffer properties)
-    /* ================================================ */
-    
-    /// Update sampleRect properties from UnsafeSampleBufferWrapper.
-    /// - Parameter sbwIn: UnsafeSampleBufferWrapper to update
-    /// - Returns: True if sampleRect properties are updated, false if not.
-    public func updateSampleRect(_ sbwIn :UnsafeSampleBufferWrapper) -> Bool {
-        let sbIn = sbwIn.sampleBuffer
-        return updateSampleRect(sbIn)
-    }
-    
-    /// Update sampleRect properties from sampleBuffer.
-    /// - Parameter sampleBuffer: CMSampleBuffer to update
-    /// - Returns: True if sampleRect properties are updated, false if not.
-    public func updateSampleRect(_ sampleBuffer :CMSampleBuffer) -> Bool {
-        let pixelBuffer :CVImageBuffer? = CMSampleBufferGetImageBuffer(sampleBuffer)
-        if let pixelBuffer = pixelBuffer {
-            let encodedSize = CGSize(width: CVPixelBufferGetWidth(pixelBuffer),
-                                     height: CVPixelBufferGetHeight(pixelBuffer))
-            
-            var sampleAspect : CGFloat = 1.0
-            if let dict = extractCFDictionary(pixelBuffer, kCVImageBufferPixelAspectRatioKey) {
-                let aspect = extractCGSize(dict,
-                                           kCVImageBufferPixelAspectRatioHorizontalSpacingKey,
-                                           kCVImageBufferPixelAspectRatioVerticalSpacingKey)
-                if aspect != CGSize.zero {
-                    sampleAspect = aspect.width / aspect.height
-                }
-            }
-            
-            var cleanSize : CGSize = encodedSize // Initial value is full size (= no clean aperture)
-            if let dict = extractCFDictionary(pixelBuffer, kCVImageBufferCleanApertureKey) {
-                var clapWidth = extractRational(dict, kCMFormatDescriptionKey_CleanApertureWidthRational)
-                if clapWidth.isNaN {
-                    clapWidth = extractCGFloat(dict, kCVImageBufferCleanApertureWidthKey)
-                }
-                var clapHeight = extractRational(dict, kCMFormatDescriptionKey_CleanApertureHeightRational)
-                if clapHeight.isNaN {
-                    clapHeight = extractCGFloat(dict, kCVImageBufferCleanApertureHeightKey)
-                }
-                if !clapWidth.isNaN && !clapHeight.isNaN {
-                    let clapSize = CGSize(width: clapWidth, height: clapHeight)
-                    cleanSize = CGSize(width: clapSize.width * sampleAspect,
-                                       height: clapSize.height)
-                }
-            }
-            
-            let productionSize = CGSize(width: encodedSize.width * sampleAspect,
-                                        height: encodedSize.height)
-            
-            if (sampleAspectRatio    != sampleAspect ||
-                sampleEncodedSize    != encodedSize  ||
-                sampleCleanSize      != cleanSize    ||
-                sampleProductionSize != productionSize)
-            {
-                sampleAspectRatio    = sampleAspect
-                sampleEncodedSize    = encodedSize
-                sampleCleanSize      = cleanSize
-                sampleProductionSize = productionSize
-                
-                return true
-            }
-        }
-        return false
-    }
-    
-    /* ================================================ */
-    // MARK: - private functions (sampleBuffer properties)
-    /* ================================================ */
-    
-    //
-    private var useCast :Bool = true
-    
-    /// CFObject to UnsafeRawPointer conversion
-    /// - Parameter obj: AnyObject to convert
-    /// - Returns: UnsafeRawPointer
-    private func toOpaque(_ obj :AnyObject) -> UnsafeRawPointer {
-        if useCast {
-            let ptr = unsafeBitCast(obj, to: UnsafeRawPointer.self)
-            return ptr
-        } else {
-            let mutablePtr :UnsafeMutableRawPointer = Unmanaged.passUnretained(obj).toOpaque()
-            let ptr :UnsafeRawPointer = UnsafeRawPointer(mutablePtr)
-            return ptr
-        }
-    }
-    
-    /// UnsafeRawPointer to CFObject conversion
-    /// - Parameters:
-    ///  - ptr: UnsafeRawPointer to convert
-    ///  - type: Type of CFObject to convert
-    ///  - Returns: CFObject of specified type
-    private func fromOpaque<T :AnyObject>(_ ptr :UnsafeRawPointer, _ type :T.Type) -> T {
-        let val = Unmanaged<T>.fromOpaque(ptr).takeUnretainedValue()
-        return val
-    }
-    
-    /// Extract CFDictionary attachment of specified key from CVPixelBuffer
-    /// - Parameters:
-    ///   - pixelBuffer: source CVPixelBuffer
-    ///   - key: Attachment Key
-    /// - Returns: Attachment Value (CFDictionary)
-    private func extractCFDictionary(_ pixelBuffer :CVImageBuffer, _ key :CFString) -> CFDictionary? {
-        var dict :CFDictionary? = nil
-        if let umCF = CVBufferGetAttachment(pixelBuffer, key, nil) {
-            // umCF :Unmanaged<CFTypeRef>
-            dict = (umCF.takeUnretainedValue() as! CFDictionary)
-        }
-        return dict
-    }
-    
-    /// Extract CFNumber value of specified key from CFDictionary
-    /// - Parameters:
-    ///   - dict: source CFDictionary
-    ///   - key: Key
-    /// - Returns: value (CFNumber)
-    private func extractCFNumber(_ dict :CFDictionary, _ key :CFString) -> CFNumber? {
-        var num :CFNumber? = nil
-        let keyOpaque = toOpaque(key)
-        if let ptr = CFDictionaryGetValue(dict, keyOpaque) {
-            num = fromOpaque(ptr, CFNumber.self)
-        }
-        return num
-    }
-    
-    /// Check if two values for single key in different dictionary are equal or not.
-    /// - Parameters:
-    ///   - d1: CFDictionary
-    ///   - d2: CFDictionary
-    ///   - key: CFString
-    /// - Returns: true if equal, false if different
-    private func equalCFNumberInDictionary(_ d1 :CFDictionary, _ d2 :CFDictionary, _ key :CFString) -> Bool {
-        let val1 = extractCFNumber(d1, key)
-        let val2 = extractCFNumber(d2, key)
-        let comp = CFNumberCompare(val1, val2, nil)
-        return (comp == CFComparisonResult.compareEqualTo)
-    }
-    
-    /// Extract CFArray value of specified key from CFDictionary
-    /// - Parameters:
-    ///   - dict: source CFDictionary
-    ///   - key: Key
-    /// - Returns: value (CFArray)
-    private func extractCFArray(_ dict :CFDictionary, _ key :CFString) -> CFArray? {
-        var array :CFArray? = nil
-        let keyOpaque = toOpaque(key)
-        if let ptr = CFDictionaryGetValue(dict, keyOpaque) {
-            array = fromOpaque(ptr, CFArray.self)
-        }
-        return array
-    }
-    
-    /// Extract CGFloat value of specified key from CFDictionary
-    /// - Parameters:
-    ///   - dict: source CFDictionary
-    ///   - key: Key
-    /// - Returns: value (CGFloat)
-    private func extractCGFloat(_ dict :CFDictionary, _ key :CFString) -> CGFloat {
-        var val :CGFloat = CGFloat.nan
-        if let num = extractCFNumber(dict, key) {
-            if CFNumberGetValue(num, .cgFloatType, &val) == false {
-                val = CGFloat.nan
-            }
-        }
-        return val
-    }
-    
-    /// Extract CGSize value of specified key pair from CFDictionary
-    /// - Parameters:
-    ///   - dict: source CFDictionary
-    ///   - key1: Key 1 for size.width
-    ///   - key2: Key 2 for size.height
-    /// - Returns: value (CGSize)
-    private func extractCGSize(_ dict :CFDictionary, _ key1 :CFString, _ key2 :CFString) -> CGSize {
-        var size :CGSize = CGSize.zero
-        let val1 = extractCGFloat(dict, key1)
-        let val2 = extractCGFloat(dict, key2)
-        if !val1.isNaN && !val2.isNaN {
-            size = CGSize(width: val1, height: val2)
-        }
-        return size
-    }
-    
-    /// Extract CGFloat value of specified rational key from CFDictionary
-    /// - Parameters:
-    ///   - dict: source CFDictionary
-    ///   - key: Key for CFArray of 2 CFNumbers: numerator, denominator
-    /// - Returns: ratio value calculated from Rational (CGFloat)
-    private func extractRational(_ dict :CFDictionary, _ key :CFString) -> CGFloat {
-        var val :CGFloat = CGFloat.nan
-        let numArray :CFArray? = extractCFArray(dict, key)
-        if let numArray = numArray, CFArrayGetCount(numArray) == 2 {
-            guard let ptr0 = CFArrayGetValueAtIndex(numArray, 0) else { return val }
-            guard let ptr1 = CFArrayGetValueAtIndex(numArray, 1) else { return val }
-            let num0 = fromOpaque(ptr0, CFNumber.self)
-            let num1 = fromOpaque(ptr1, CFNumber.self)
-            var val0 :CGFloat = 1.0
-            var val1 :CGFloat = 1.0
-            if (CFNumberGetValue(num0, .cgFloatType, &val0) && CFNumberGetValue(num1, .cgFloatType, &val1)) {
-                val = (val0 / val1)
-            }
-        }
-        return val
     }
 }
