@@ -20,8 +20,8 @@ extension CaptureManager {
     public func findFirstDevice() -> DLABDevice? {
         if currentDevice == nil {
             let deviceArray = deviceList()
-            if let deviceArray = deviceArray, deviceArray.count > 0 {
-                currentDevice = deviceArray.first!
+            if let deviceArray = deviceArray, !deviceArray.isEmpty {
+                currentDevice = deviceArray.first
             }
         }
         return currentDevice

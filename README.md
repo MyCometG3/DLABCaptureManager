@@ -89,7 +89,7 @@ NOTE: This framework is under development.
 ###### 3. Stop Capture
     if let manager = manager, manager.running {
       if manager.recording {
-        manager.recordToggle
+        manager.recordToggle()
       }
       manager.captureStop()
     }

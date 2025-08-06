@@ -42,7 +42,7 @@ public enum TimecodeType: Int, Sendable {
     case RP188 = 4
     ///  CoreAudio: validate on CoreAudio SMPTETime CMAttachment (experimental)
     case CoreAudio = 8
-    
+
     /// True if it is from any Decklink Device
     /// - Returns: Bool
     public func byDevice() -> Bool {
@@ -82,9 +82,14 @@ extension CaptureManager: @unchecked Sendable {
             semaphore.signal()
         }
         semaphore.wait()
-        return try lock.sync { try result!.get() }
+        return try lock.sync {
+            guard let result = result else {
+                fatalError("Async operation failed to complete - this should never happen")
+            }
+            return try result.get()
+        }
     }
-    
+
     /// Executes an asynchronous, non-throwing operation synchronously using a detached task.
     /// - Parameter block: A closure that performs asynchronous work.
     /// - Returns: The result produced by the closure.
@@ -102,92 +107,97 @@ extension CaptureManager: @unchecked Sendable {
             semaphore.signal()
         }
         semaphore.wait()
-        return lock.sync { result! }
+        return lock.sync {
+            guard let result = result else {
+                fatalError("Async operation failed to complete - this should never happen for non-throwing operations")
+            }
+            return result
+        }
     }
 }
 
 public class CaptureManager: NSObject, DLABInputCaptureDelegate {
     /// Verbose mode (debugging purpose)
     public var verbose: Bool = false
-    
+
     /* ============================================ */
     // MARK: - properties - Capturing
     /* ============================================ */
-    
+
     /// True while capture is running
     public private(set) var running: Bool = false
-    
+
     /// Capture device as DLABDevice object
-    public var currentDevice :DLABDevice? = nil
-    
+    public var currentDevice: DLABDevice? = nil
+
     /* ============================================ */
     // MARK: - properties - Capturing audio
     /* ============================================ */
-    
+
     /// Capture audio bit depth (See DLABConstants.h)
     public var audioDepth: DLABAudioSampleType = .type16bitInteger
-    
+
     /// Capture audio channels. 2 for Stereo. 8 or 16 for discrete.
     /// Set 8 to use with hdmiAudioChannels.
     /// Set 0 to disable audioCapture and audioPreview.
     public var audioChannels: UInt32 = 2
-    
+
     /// Capture audio bit rate (See DLABConstants.h)
     public var audioRate: DLABAudioSampleRate = .rate48kHz
-    
+
     /// Audio Input Connection
     public var audioConnection: DLABAudioConnection = .init()
-    
+
     /// Volume of audio preview
     public var volume: Float = 1.0 {
         didSet {
             volume = max(0.0, min(1.0, volume))
-            
+
             if let audioPreview = audioPreview {
                 audioPreview.volume = Float32(volume)
             }
         }
     }
-    
+
     /// Use HDMI audio channel order (L R C LFE Ls Rs Rls Rrs), instead of descrete. audioChannels should be 8.
     public var hdmiAudioChannels: UInt32 = 0
-    
+
     /// For HDMI audio channel order. Set true if (ch3,ch4) == (LFE, C), as reveresed order.
     public var reverseCh3Ch4: Bool = false
-    
+
     /// True while audio capture is enabled
     public private(set) var audioCaptureEnabled: Bool = false
-    
+
     /// AudioPreview object
     private var audioPreview: CaptureAudioPreview? = nil
-    
+
     /* ============================================ */
     // MARK: - properties - Capturing video
     /* ============================================ */
-    
+
     /// Capture video DLABDisplayMode. (See DLABConstants.h)
     public var displayMode: DLABDisplayMode = .modeNTSC
-    
+
     /// Capture video pixelFormat (See DLABConstants.h)
     public var pixelFormat: DLABPixelFormat = .format8BitYUV
-    
+
     /// Override specific CoreVideoPixelFormat (with conversion)
     ///
     /// Set 0 to use Default CVPixelFormat
     public var cvPixelFormat: OSType = 0
-    
+
     /// Capture video DLABVideoInputFlag (See DLABConstants.h)
     public var inputFlag: DLABVideoInputFlag = []
-    
+
     /// Video Input Connection
     public var videoConnection: DLABVideoConnection = .init()
-    
+
     /// True while video capture is enabled
     public private(set) var videoCaptureEnabled: Bool = false
-    
+
     /// Set CaptureVideoPreview view here - based on AVSampleBufferDisplayLayer
     public weak var videoPreview: CaptureVideoPreview? = nil
-    
+
     /// Parent NSView for video preview - based on CreateCocoaScreenPreview()
     public weak var parentView: NSView? = nil {
         didSet {
@@ -205,29 +215,29 @@ public class CaptureManager: NSObject, DLABInputCaptureDelegate {
             }
         }
     }
-    
+
     /* ============================================ */
     // MARK: - properties - Recording
     /* ============================================ */
-    
+
     /// True while recording
     public private(set) var recording: Bool = false
-    
+
     /// Writer object for recording
     private var writer: CaptureWriter? = nil
-    
+
     /// Optional. Set preferred output URL.
     public var movieURL: URL? = nil
-    
+
     /// Optional. Auto-generated movie name prefix.
     public var prefix: String? = "DL-"
-    
+
     /// Optional. Set preferred timeScale for video/timecode. 0 for default value.
     public var sampleTimescale :CMTimeScale = 0
-    
+
     /// Duration in sec of last recording
     private var lastDuration :Float64 = 0.0
-    
+
     /// Duration in sec of recording
     public var duration :Float64 {
         get {
@@ -240,28 +250,28 @@ public class CaptureManager: NSObject, DLABInputCaptureDelegate {
             }
         }
     }
-    
+
     /* ============================================ */
     // MARK: - properties - Recording audio
     /* ============================================ */
-    
+
     /// Set YES to encode audio in AAC. No to use LPCM.
     public var encodeAudio :Bool = false
-    
+
     /// Set audioFormatID as kAudioFormatXXXX.
     public var encodeAudioFormatID : AudioFormatID = kAudioFormatMPEG4AAC
-    
+
     /// Set encoded audio target bitrate. Default is 256 * 1000 bps.
     /// Recommends AAC-LC:64k~/ch, HE-AAC:24k~/ch, HE-AACv2: 12k~/ch.
     public var encodeAudioBitrate :UInt = 256_000
-    
+
     /// Optional: customise audio encode settings of AVAssetWriterInput.
     public var updateAudioSettings : (@Sendable ([String:Any]) -> [String:Any])? = nil
-    
+
     /* ============================================ */
     // MARK: - properties - Recording video
     /* ============================================ */
-    
+
     /// Set output videoStyle template (See VideoStyle.swift).
     /// Should be compatible with displayMode value in (width, height).
     /// Will reset offset and encodedSize/visibleSize/aspectRatio.
@@ -273,75 +283,75 @@ public class CaptureManager: NSObject, DLABInputCaptureDelegate {
             aspectRatio = videoStyle.aspectRatio()
         }
     }
-    
+
     /// Set preferred clean-aperture offset. 0 stands center(default).
     public var offset = NSPoint.zero
-    
+
     /// ReadOnly encoded size of videoStyle.
     public private(set) var encodedSize = NSSize(width: 720, height: 486)
-    
+
     /// ReadOnly clean-aperture size of videoStyle.
     public private(set) var visibleSize = NSSize(width: 704, height: 480)
-    
+
     /// ReadOnly apect-ratio of videoStyle
     public private(set) var aspectRatio = NSSize(width: 40, height: 33)
-    
+
     /// Set YES to encode video.
     public var encodeVideo :Bool = true
-    
+
     /// Set YES to use ProRes422 for video. No to use specific videoCodec.
     public var encodeProRes422 :Bool = true
-    
+
     /// Set VideoCodec type as kCMVideoCodecType_XXX. Should be compatible w/ videoStyle.
     public var encodeVideoCodecType :CMVideoCodecType? = kCMVideoCodecType_AppleProRes422LT
-    
+
     /// Set encoded video target bitrate. Default is 0 bps = Undefined.
     /// BPP=0.20(30fps) 1920x1080=12Mbps, 1280x720=5.3Mbps, 720x486=2.0Mbps.
     /// BPP=0.20(25fps) 1920x1080=10Mbps, 1280x720=4.4Mbps, 720x576=2.0Mbps.
     public var encodeVideoBitrate :UInt = 0
-    
+
     /// Optional: For interlaced encoding. Set kCMFormatDescriptionFieldDetail_XXX.
     public var fieldDetail :CFString? = kCMFormatDescriptionFieldDetail_SpatialFirstLineLate
-    
+
     /// Optional: customise video encode settings of AVAssetWriterInput.
     public var updateVideoSettings : (@Sendable ([String:Any]) -> [String:Any])? = nil
-    
+
     /* ============================================ */
     // MARK: - properties - Recording timecode
     /* ============================================ */
-    
+
     /// True if input provides timecode data
     public private(set) var timecodeReady :Bool = false
-    
+
     /// Timecode helper object
     private var timecodeHelper :CaptureTimecodeHelper? = nil
-    
+
     /// Timecode format type (timecode
     public var timecodeFormatType : CMTimeCodeFormatType = kCMTimeCodeFormatType_TimeCode32
-    
+
     /// Validate if source provides timecode of specified type. Set before captureStart().
     public var timecodeSource :TimecodeType? = nil
-    
+
     /* ============================================ */
     // MARK: - public init/deinit
     /* ============================================ */
-    
+
     public override init() {
         super.init()
-        
+
         // print("CaptureManager.\(#function)")
     }
-    
+
     deinit {
         // print("CaptureManager.\(#function)")
-        
+
         detachedCleanup()
     }
-    
+
     /* ============================================ */
     // MARK: - public method
     /* ============================================ */
-    
+
     /// Start Capture session
     @discardableResult
     public func captureStartAsync() async -> Bool {
@@ -349,14 +359,14 @@ public class CaptureManager: NSObject, DLABInputCaptureDelegate {
         if currentDevice == nil {
             _ = findFirstDevice()
         }
-        
+
         if let device = currentDevice, running == false {
             if timecodeSource != nil {
                 // support for timecode
                 timecodeReady = false
                 prepTimecodeHelper()
             }
-            
+
             do {
                 var vSetting:DLABVideoSetting? = nil
                 var aSetting:DLABAudioSetting? = nil
@@ -368,7 +378,7 @@ public class CaptureManager: NSObject, DLABInputCaptureDelegate {
                     try aSetting = device.createInputAudioSetting(of: audioDepth,
                                                                   channelCount: audioChannels,
                                                                   sampleRate: audioRate)
-                    
+
                     // HDMI Audio support
                     if let aSetting = aSetting, videoConnection == .HDMI, audioConnection == .embedded,
                        audioChannels == 8, audioChannels >= hdmiAudioChannels, hdmiAudioChannels > 0 {
@@ -377,7 +387,7 @@ public class CaptureManager: NSObject, DLABInputCaptureDelegate {
                                                                  swap3chAnd4ch: reverseCh3Ch4)
                     }
                 }
-                
+
                 // NOTE: AVAssetWriter Buggy behavior found...
                 // If "passthru write CMPixelBuffer w/ clap", auto generated tapt
                 // (track aperture mode dimentions) atom contains error as following:
@@ -394,7 +404,7 @@ public class CaptureManager: NSObject, DLABInputCaptureDelegate {
                 //
                 // https://developer.apple.com/library/content/documentation/
                 //         QuickTime/QTFF/QTFFChap2/qtff2.html#//apple_ref/doc/uid/TP40000939-CH204-SW15
-                
+
                 if let vSetting = vSetting {
                     try vSetting.addClapExt(ofWidthN: Int32(visibleSize.width), widthD: 1,
                                             heightN: Int32(visibleSize.height), heightD: 1,
@@ -403,13 +413,13 @@ public class CaptureManager: NSObject, DLABInputCaptureDelegate {
                     try vSetting.addPaspExt(ofHSpacing: UInt32(aspectRatio.width),
                                             vSpacing: UInt32(aspectRatio.height))
                 }
-                
+
                 if let vSetting = vSetting, cvPixelFormat > 0 {
                     // rebuild formatDescription with new CVPixelFormat
                     vSetting.cvPixelFormatType = cvPixelFormat
                     try vSetting.buildVideoFormatDescription()
                 }
-                
+
                 videoCaptureEnabled = false
                 if let vSetting = vSetting {
                     // Enable Video Preview
@@ -423,7 +433,7 @@ public class CaptureManager: NSObject, DLABInputCaptureDelegate {
                             videoPreview.prepare() // @MainActor
                         }
                     }
-                    
+
                     // Enable Video Capture
                     if videoConnection.rawValue > 0 {
                         try device.enableVideoInput(with: vSetting, on: videoConnection)
@@ -432,7 +442,7 @@ public class CaptureManager: NSObject, DLABInputCaptureDelegate {
                     }
                     videoCaptureEnabled = true
                 }
-                
+
                 audioCaptureEnabled = false
                 if let aSetting = aSetting {
                     // Enable Audio Preview
@@ -442,7 +452,7 @@ public class CaptureManager: NSObject, DLABInputCaptureDelegate {
                             audioPreview.volume = Float32(volume)
                         }
                     }
-                    
+
                     // Enable Audio Capture
                     if audioConnection.rawValue > 0 {
                         try device.enableAudioInput(with: aSetting, on: audioConnection)
@@ -451,17 +461,17 @@ public class CaptureManager: NSObject, DLABInputCaptureDelegate {
                     }
                     audioCaptureEnabled = true
                 }
-                
+
                 if (audioCaptureEnabled || videoCaptureEnabled) {
                     // Update inputVideoSetting
                     applyTimecodeSetting()
-                    
+
                     // Start stream
                     device.inputDelegate = self
                     try device.startStreams()
                     running = true
                 }
-                
+
                 if running {
                     printVerbose("CaptureManager.\(#function) - Start capture session completed")
                     return true
@@ -474,7 +484,7 @@ public class CaptureManager: NSObject, DLABInputCaptureDelegate {
         }
         return false
     }
-    
+
     /// Stop capture session
     @discardableResult
     public func captureStopAsync() async -> Bool {
@@ -482,15 +492,15 @@ public class CaptureManager: NSObject, DLABInputCaptureDelegate {
             if recording {
                 await recordToggleAsync() // actor isolated (writer)
             }
-            
+
             printVerbose("CaptureManager.\(#function) - Stop capture session...")
-            
+
             do {
                 // Stop stream
                 running = false
                 try device.stopStreams()
                 device.inputDelegate = nil
-                
+
                 // Disable Capture
                 if videoCaptureEnabled {
                     videoCaptureEnabled = false
@@ -500,7 +510,7 @@ public class CaptureManager: NSObject, DLABInputCaptureDelegate {
                     audioCaptureEnabled = false
                     try device.disableAudioInput()
                 }
-                
+
                 // Disable Preview
                 if let videoPreview = videoPreview {
                     await videoPreview.shutdown() // @MainActor
@@ -516,13 +526,13 @@ public class CaptureManager: NSObject, DLABInputCaptureDelegate {
             } catch let error as NSError {
                 printVerbose("ERROR:CaptureManager.\(#function) - \(error.domain)(\(error.code)): \(error.localizedFailureReason ?? "unknown reason")")
             }
-            
+
             do {
                 // support for timecode
                 timecodeReady = false
                 timecodeHelper = nil
             }
-            
+
             if !running {
                 printVerbose("CaptureManager.\(#function) - Stop capture session completed")
                 return true
@@ -530,56 +540,56 @@ public class CaptureManager: NSObject, DLABInputCaptureDelegate {
         } else {
             printVerbose("ERROR:CaptureManager.\(#function) - device is not ready")
         }
-        
+
         return false
     }
-    
+
     /// Toggle recording using current session
     public func recordToggleAsync() async {
         if running {
             if let writer = writer {
                 printVerbose("CaptureManager.\(#function) - Stop recording...")
-                
+
                 // stop recording
                 await writer.closeSession()
-                
+
                 // keep last duration
                 lastDuration = await writer.duration
-                
+
                 // unref writer
                 self.writer = nil
-                
+
                 if recording {
                     recording = false
                 }
-                
+
                 printVerbose("CaptureManager.\(#function) - Stop recording completed")
             } else {
                 // support for timecode
                 prepTimecodeHelper()
-                
+
                 // Update inputVideoSetting
                 applyTimecodeSetting()
-                
+
                 // prepare writer
                 writer = CaptureWriter()
-                
+
                 // start recording
                 if let writer = writer {
                     printVerbose("CaptureManager.\(#function) - Start recording...")
-                    
+
                     // prepare CaptureWriterConfig
                     var config = await writer.getConfig()
-                    
+
                     config.movieURL = movieURL
                     config.prefix = prefix
                     config.sampleTimescale = (sampleTimescale > 0 ? sampleTimescale : calcTimescale())
-                    
+
                     config.encodeAudio = encodeAudio
                     config.encodeAudioFormatID = encodeAudioFormatID
                     config.encodeAudioBitrate = encodeAudioBitrate
                     config.updateAudioSettings = updateAudioSettings
-                    
+
                     config.videoStyle = videoStyle
                     config.clapHOffset = Int(offset.x)
                     config.clapVOffset = Int(offset.y)
@@ -590,20 +600,20 @@ public class CaptureManager: NSObject, DLABInputCaptureDelegate {
                     config.encodeVideoCodecType = encodeVideoCodecType
                     config.fieldDetail = fieldDetail as String?
                     config.updateVideoSettings = updateVideoSettings
-                    
+
                     config.useTimecode = timecodeReady
-                    
+
                     config.sourceVideoFormatDescription = currentDevice?.inputVideoSetting?.videoFormatDescription
                     config.sourceAudioFormatDescription = currentDevice?.inputAudioSetting?.audioFormatDescription
-                    
+
                     // apply CaptureWriterConfig
                     await writer.setConfig(config)
                     await writer.openSession()
-                    
+
                     if await writer.isRecording {
                         recording = true
                         // print("NOTICE: Recording started")
-                        
+
                         printVerbose("CaptureManager.\(#function) - Start recording completed")
                     } else {
                         printVerbose("ERROR: Failed to start recording")
@@ -616,39 +626,39 @@ public class CaptureManager: NSObject, DLABInputCaptureDelegate {
             printVerbose("ERROR: device is not ready")
         }
     }
-    
+
     /* ============================================ */
     // MARK: - private method
     /* ============================================ */
-    
+
     /// deinit helper method for cleanup.
     private func detachedCleanup() {
         // Copy actor isolated properties to nonisolated variables
         let verbose = self.verbose
-        
+
         let device = self.currentDevice
         let writer = self.writer
         let videoPreview = self.videoPreview
         let parentView = self.parentView
         let audioPreview = self.audioPreview
-        
+
         let isRunning = self.running
         let isRecording = self.recording
         let isVideoCaptureEnabled = self.videoCaptureEnabled
         let isAudioCaptureEnabled = self.audioCaptureEnabled
-        
+
         // Perform cleanup on a detached task
         Task.detached {
             // Avoid capturing self in the deinit task
             if verbose { print("CaptureManager.\(#function) - Task started") }
-            
+
             if isRecording, let writer = writer {
                 await writer.closeSession() // actor isolated (writer)
             }
             if isRunning, let device = device {
                 try? device.stopStreams()
                 device.inputDelegate = nil
-                
+
                 if isVideoCaptureEnabled {
                     try? device.disableVideoInput()
                 }
@@ -668,11 +678,11 @@ public class CaptureManager: NSObject, DLABInputCaptureDelegate {
                     try? audioPreview.aqDispose()
                 }
             }
-            
+
             if verbose { print("CaptureManager.\(#function) - Task completed") }
         }
     }
-    
+
     /// Helper method to update parentView for input video screen preview on MainActor.
     ///
     /// - Parameter parentView: The NSView to attach the input screen preview to. If nil, it will detach the preview.
@@ -681,10 +691,10 @@ public class CaptureManager: NSObject, DLABInputCaptureDelegate {
         guard let device = currentDevice else {
             throw createError(-1, "Current device is nil", "Device not initialized")
         }
-        
+
         try device.setInputScreenPreviewTo(parentView)
     }
-    
+
     private func createError(_ status :OSStatus, _ description :String?, _ failureReason :String?) -> NSError {
         let domain = "com.MyCometG3.DLABCaptureManager.ErrorDomain"
         let code = NSInteger(status)
@@ -694,21 +704,21 @@ public class CaptureManager: NSObject, DLABInputCaptureDelegate {
                                       NSLocalizedFailureReasonErrorKey:reason]
         return NSError(domain: domain, code: code, userInfo: userInfo)
     }
-    
+
     private func calcTimescale() -> CMTimeScale {
         if let timeScale = nativeTimescaleFor(displayMode) {
             return timeScale
         }
         return 60000 // 30.0 * 1000
     }
-    
+
     private func calcFPS() -> Float {
         if let fps = nativeFPSFor(displayMode) {
             return fps
         }
         return 60.0 //
     }
-    
+
     private func prepTimecodeHelper() {
         if let timecodeSource = timecodeSource, timecodeSource == .CoreAudio {
             if let timecodeHelper = timecodeHelper {
@@ -718,7 +728,7 @@ public class CaptureManager: NSObject, DLABInputCaptureDelegate {
             }
         }
     }
-    
+
     private func applyTimecodeSetting() {
         if let vSetting = currentDevice?.inputVideoSetting {
             vSetting.useSERIAL = false
@@ -738,20 +748,20 @@ public class CaptureManager: NSObject, DLABInputCaptureDelegate {
             }
         }
     }
-    
+
     internal func printVerbose(_ message: String...) {
         // print("\(#file) \(#line) \(#function)")
-        
+
         if self.verbose {
             let output = message.joined(separator: "\n")
             print(output)
         }
     }
-    
+
     /* ============================================ */
     // MARK: - callback
     /* ============================================ */
-    
+
     /// Callback method implementation - DLABInputCaptureDelegate
     /// - Parameters:
     ///   - sampleBuffer: CMSampleBuffer
@@ -763,7 +773,7 @@ public class CaptureManager: NSObject, DLABInputCaptureDelegate {
             await processCapturedAudioSampleAsync(info)
         }
     }
-    
+
     /// Callback method implementation - DLABInputCaptureDelegate
     /// - Parameters:
     ///   - sampleBuffer: CMSampleBuffer
@@ -775,7 +785,7 @@ public class CaptureManager: NSObject, DLABInputCaptureDelegate {
             await processCapturedVideoSampleAsync(info)
         }
     }
-    
+
     /// Callback method implementation - DLABInputCaptureDelegate
     /// - Parameters:
     ///   - sampleBuffer: CMSampleBuffer
@@ -789,12 +799,12 @@ public class CaptureManager: NSObject, DLABInputCaptureDelegate {
             await processCapturedVideoSampleAsync(info)
         }
     }
-    
+
     /// Audio SampleBuffer callback - Enqueue immediately
     /// - Parameter info: A wrapper for sampleBuffer and sender
     private func processCapturedAudioSampleAsync(_ info: UnsafeSampleBufferInfo) async {
         let sampleBuffer = info.sampleBuffer
-        
+
         if let writer = writer {
             let wrapper = UnsafeSampleBufferWrapper(sampleBuffer: sampleBuffer)
             do {
@@ -811,27 +821,27 @@ public class CaptureManager: NSObject, DLABInputCaptureDelegate {
             }
         }
     }
-    
+
     /// Video SampleBuffer callback - Enqueue immediately Or using DisplayLink
     /// - Parameter info: Video SampleBuffer wrapper
     private func processCapturedVideoSampleAsync(_ info: UnsafeSampleBufferInfo) async {
         let sampleBuffer = info.sampleBuffer
         let setting = info.setting
-        
+
         if let writer = writer {
             let wrapper = UnsafeSampleBufferWrapper(sampleBuffer: sampleBuffer)
             do {
                 try? await writer.appendSampleBuffer(wrapper: wrapper, mediaType: .video)
             }
         }
-        
+
         if let videoPreview = videoPreview {
             let wrapper = UnsafeSampleBufferWrapper(sampleBuffer: sampleBuffer)
             do {
                 await videoPreview.queueSampleBufferAsync(wrapper: wrapper)
             }
         }
-        
+
         if let setting = setting {
             // support for Device timecode
             if let timecodeSource = timecodeSource, timecodeSource.byDevice() {
@@ -844,7 +854,7 @@ public class CaptureManager: NSObject, DLABInputCaptureDelegate {
                             try? await writer.appendSampleBuffer(wrapper: wrapper, mediaType: .timecode)
                         }
                     }
-                    
+
                     // source provides timecode
                     if timecodeReady == false {
                         timecodeReady = true
@@ -863,7 +873,7 @@ public class CaptureManager: NSObject, DLABInputCaptureDelegate {
                             try? await writer.appendSampleBuffer(wrapper: wrapper, mediaType: .timecode)
                         }
                     }
-                    
+
                     // source provides timecode
                     if timecodeReady == false {
                         timecodeReady = true
