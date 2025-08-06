@@ -16,11 +16,16 @@ extension Comparable {
 }
 
 /// Sendable SampleBuffer wrapper
+/// Note: CMSampleBuffer is not Sendable, but this wrapper is used to safely transfer
+/// sample buffers across actor boundaries in controlled contexts where the sender
+/// guarantees exclusive access.
 public struct UnsafeSampleBufferWrapper: @unchecked Sendable {
-    let sampleBuffer :CMSampleBuffer
+    let sampleBuffer: CMSampleBuffer
 }
 
 /// Sendable SampleBuffer info wrapper
+/// Note: Contains non-Sendable types but used in controlled contexts where
+/// the caller guarantees thread-safe access patterns.
 public struct UnsafeSampleBufferInfo: @unchecked Sendable {
     var sampleBuffer: CMSampleBuffer
     var setting: DLABTimecodeSetting?
@@ -28,7 +33,7 @@ public struct UnsafeSampleBufferInfo: @unchecked Sendable {
 }
 
 /// Specify preferred timecodeSource.
-public enum TimecodeType :Int, Sendable {
+public enum TimecodeType: Int, Sendable {
     ///  SERIAL: validate on DLABTimecodeFormatSerial
     case SERIAL = 1
     ///  VITC: validate on DLABTimecodeFormatVITC/VITCField2
@@ -50,6 +55,10 @@ public enum TimecodeType :Int, Sendable {
     }
 }
 
+/// Extension to make CaptureManager conform to Sendable for cross-actor usage.
+/// Note: This is marked as @unchecked because CaptureManager contains non-Sendable
+/// properties, but the class is designed to be used safely across actor boundaries
+/// through careful state management and synchronization.
 extension CaptureManager: @unchecked Sendable {
     /// Executes an asynchronous, throwing operation synchronously using a detached task.
     /// - Parameter block: A closure that performs asynchronous work and may throw.
@@ -106,7 +115,7 @@ public class CaptureManager: NSObject, DLABInputCaptureDelegate {
     /* ============================================ */
     
     /// True while capture is running
-    public private(set) var running :Bool = false
+    public private(set) var running: Bool = false
     
     /// Capture device as DLABDevice object
     public var currentDevice :DLABDevice? = nil
@@ -116,21 +125,21 @@ public class CaptureManager: NSObject, DLABInputCaptureDelegate {
     /* ============================================ */
     
     /// Capture audio bit depth (See DLABConstants.h)
-    public var audioDepth :DLABAudioSampleType = .type16bitInteger
+    public var audioDepth: DLABAudioSampleType = .type16bitInteger
     
     /// Capture audio channels. 2 for Stereo. 8 or 16 for discrete.
     /// Set 8 to use with hdmiAudioChannels.
     /// Set 0 to disable audioCapture and audioPreview.
-    public var audioChannels :UInt32 = 2
+    public var audioChannels: UInt32 = 2
     
     /// Capture audio bit rate (See DLABConstants.h)
-    public var audioRate :DLABAudioSampleRate = .rate48kHz
+    public var audioRate: DLABAudioSampleRate = .rate48kHz
     
     /// Audio Input Connection
-    public var audioConnection :DLABAudioConnection = .init()
+    public var audioConnection: DLABAudioConnection = .init()
     
     /// Volume of audio preview
-    public var volume :Float = 1.0 {
+    public var volume: Float = 1.0 {
         didSet {
             volume = max(0.0, min(1.0, volume))
             
@@ -141,46 +150,46 @@ public class CaptureManager: NSObject, DLABInputCaptureDelegate {
     }
     
     /// Use HDMI audio channel order (L R C LFE Ls Rs Rls Rrs), instead of descrete. audioChannels should be 8.
-    public var hdmiAudioChannels :UInt32 = 0
+    public var hdmiAudioChannels: UInt32 = 0
     
     /// For HDMI audio channel order. Set true if (ch3,ch4) == (LFE, C), as reveresed order.
-    public var reverseCh3Ch4 :Bool = false
+    public var reverseCh3Ch4: Bool = false
     
     /// True while audio capture is enabled
-    public private(set) var audioCaptureEnabled :Bool = false
+    public private(set) var audioCaptureEnabled: Bool = false
     
     /// AudioPreview object
-    private var audioPreview :CaptureAudioPreview? = nil
+    private var audioPreview: CaptureAudioPreview? = nil
     
     /* ============================================ */
     // MARK: - properties - Capturing video
     /* ============================================ */
     
     /// Capture video DLABDisplayMode. (See DLABConstants.h)
-    public var displayMode :DLABDisplayMode = .modeNTSC
+    public var displayMode: DLABDisplayMode = .modeNTSC
     
     /// Capture video pixelFormat (See DLABConstants.h)
-    public var pixelFormat :DLABPixelFormat = .format8BitYUV
+    public var pixelFormat: DLABPixelFormat = .format8BitYUV
     
     /// Override specific CoreVideoPixelFormat (with conversion)
     ///
     /// Set 0 to use Default CVPixelFormat
-    public var cvPixelFormat : OSType = 0
+    public var cvPixelFormat: OSType = 0
     
     /// Capture video DLABVideoInputFlag (See DLABConstants.h)
-    public var inputFlag :DLABVideoInputFlag = []
+    public var inputFlag: DLABVideoInputFlag = []
     
     /// Video Input Connection
-    public var videoConnection :DLABVideoConnection = .init()
+    public var videoConnection: DLABVideoConnection = .init()
     
     /// True while video capture is enabled
-    public private(set) var videoCaptureEnabled :Bool = false
+    public private(set) var videoCaptureEnabled: Bool = false
     
     /// Set CaptureVideoPreview view here - based on AVSampleBufferDisplayLayer
-    public weak var videoPreview :CaptureVideoPreview? = nil
+    public weak var videoPreview: CaptureVideoPreview? = nil
     
     /// Parent NSView for video preview - based on CreateCocoaScreenPreview()
-    public weak var parentView :NSView? = nil {
+    public weak var parentView: NSView? = nil {
         didSet {
             Task { @MainActor in
                 guard let device = currentDevice else { return }
@@ -202,16 +211,16 @@ public class CaptureManager: NSObject, DLABInputCaptureDelegate {
     /* ============================================ */
     
     /// True while recording
-    public private(set) var recording :Bool = false
+    public private(set) var recording: Bool = false
     
     /// Writer object for recording
-    private var writer :CaptureWriter? = nil
+    private var writer: CaptureWriter? = nil
     
     /// Optional. Set preferred output URL.
-    public var movieURL : URL? = nil
+    public var movieURL: URL? = nil
     
-    /// Optional. Auto-generated movide name prefix.
-    public var prefix : String? = "DL-"
+    /// Optional. Auto-generated movie name prefix.
+    public var prefix: String? = "DL-"
     
     /// Optional. Set preferred timeScale for video/timecode. 0 for default value.
     public var sampleTimescale :CMTimeScale = 0
