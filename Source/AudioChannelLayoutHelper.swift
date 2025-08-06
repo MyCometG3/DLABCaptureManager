@@ -10,6 +10,47 @@ import Foundation
 import AVFoundation
 import VideoToolbox
 
+/// Enum defining different output types for AudioChannelLayout creation
+internal enum AudioChannelLayoutOutputType {
+    case descriptions8Ch    // Use 8-channel layout with AudioChannelDescriptions (existing behavior)
+    case tag2Ch            // Use AudioChannelLayoutTag for 2-channel (MPEG_2_0)
+    case tag3Ch            // Use AudioChannelLayoutTag for 3-channel (MPEG_3_0_B)
+    case tag5_1Ch          // Use AudioChannelLayoutTag for 5.1-channel (MPEG_5_1_D)
+    case tag7_1Ch          // Use AudioChannelLayoutTag for 7.1-channel (MPEG_7_1_B)
+    
+    /// Get the appropriate AudioChannelLayoutTag for this output type
+    var layoutTag: AudioChannelLayoutTag {
+        switch self {
+        case .descriptions8Ch:
+            return kAudioChannelLayoutTag_UseChannelDescriptions
+        case .tag2Ch:
+            return kAudioChannelLayoutTag_MPEG_2_0  // L R
+        case .tag3Ch:
+            return kAudioChannelLayoutTag_MPEG_3_0_B  // C L R
+        case .tag5_1Ch:
+            return kAudioChannelLayoutTag_MPEG_5_1_D  // C L R Ls Rs LFE
+        case .tag7_1Ch:
+            return kAudioChannelLayoutTag_MPEG_7_1_B  // C Lc Rc L R Ls Rs LFE
+        }
+    }
+    
+    /// Get the output channel count for this output type
+    var outputChannelCount: Int {
+        switch self {
+        case .descriptions8Ch:
+            return 8
+        case .tag2Ch:
+            return 2
+        case .tag3Ch:
+            return 3
+        case .tag5_1Ch:
+            return 6
+        case .tag7_1Ch:
+            return 8
+        }
+    }
+}
+
 extension CaptureWriter {
     /*
      NOTE:
@@ -185,11 +226,11 @@ extension CaptureWriter {
         let inputChannelCount: Int
         let validChannelCount: Int
         let bytesPerSample: Int
-        let frameCount: Int
-        let inBlockBuffer: CMBlockBuffer
-        let sampleCount: Int
-        let presentationTimeStamp: CMTime
-        let duration: CMTime
+        let srcFrameCount: Int // Renamed from frameCount - from source sample buffer
+        let inBlockBuffer: CMBlockBuffer? // Make optional since not always needed
+        let srcSampleCount: Int // Renamed from sampleCount - from source sample buffer
+        let srcPresentationTimeStamp: CMTime // Renamed from presentationTimeStamp - from source sample buffer
+        let srcDuration: CMTime // Renamed from duration - from source sample buffer
         let channelMap: [Int] // Add channelMap to avoid recalculation
         let outputChannelCount: Int // Add output channel count
         let outputType: AudioChannelLayoutOutputType // Add output type
@@ -204,15 +245,12 @@ extension CaptureWriter {
     // MARK: - Step 1: Extract Audio Properties
     
     private func extractAudioProperties(from sampleBuffer: CMSampleBuffer, outputType: AudioChannelLayoutOutputType = .descriptions8Ch) -> AudioProperties? {
-        guard encodeAudio, encodeAudioFormatID == kAudioFormatMPEG4AAC else { return nil }
+        guard encodeAudio, isAACFamily(encodeAudioFormatID) else { return nil }
         guard let sourceAudioFormatDescription = sourceAudioFormatDescription else { return nil }
         guard let asbd_p = CMAudioFormatDescriptionGetStreamBasicDescription(sourceAudioFormatDescription) else { return nil }
         
         var layoutSize: Int = 0
         guard let acl_p = CMAudioFormatDescriptionGetChannelLayout(sourceAudioFormatDescription, sizeOut: &layoutSize) else { return nil }
-        
-        let inputChannels = Int(asbd_p.pointee.mChannelsPerFrame)
-        guard inputChannels == 8 else { return nil }
         
         guard let originalBlockBuffer = CMSampleBufferGetDataBuffer(sampleBuffer) else { return nil }
         
@@ -225,12 +263,19 @@ extension CaptureWriter {
         let bytesPerFrame = Int(asbd.mBytesPerFrame)
         let frameCount = inSize / bytesPerFrame
         let validChannelCount = countValidChannels(layoutPtr: acl_p)
+        guard validChannelCount > 0 else { return nil }
+        
+        // Note: The framework produces either 2/8/16ch Audio. Accept 2 or 8ch only.
+        let inputChannels = Int(asbd_p.pointee.mChannelsPerFrame)
+        guard validChannelCount <= inputChannels && inputChannels <= 8 else { return nil }
         
         // Calculate channel mapping once
         let isReverse34 = hasReverse34Layout(layoutPtr: acl_p, validChannelCount: validChannelCount)
         let channelMap: [Int]
         switch validChannelCount {
-        case 3:
+        case 2: // 2ch stereo
+            channelMap = [0, 1] // L R
+        case 3: // 3.0ch
             channelMap = isReverse34 ? [3, 0, 1] : [2, 0, 1] // C L R
         case 6: // 5.1ch
             channelMap = isReverse34 ? [3, 0, 1, 4, 5, 2] : [2, 0, 1, 4, 5, 3] // C L R Ls Rs LFE
@@ -254,11 +299,11 @@ extension CaptureWriter {
             inputChannelCount: inputChannels,
             validChannelCount: validChannelCount,
             bytesPerSample: bytesPerSample,
-            frameCount: frameCount,
+            srcFrameCount: frameCount,
             inBlockBuffer: contiguousBlockBuffer, // Use contiguous buffer
-            sampleCount: CMSampleBufferGetNumSamples(sampleBuffer),
-            presentationTimeStamp: CMSampleBufferGetPresentationTimeStamp(sampleBuffer),
-            duration: CMSampleBufferGetDuration(sampleBuffer),
+            srcSampleCount: CMSampleBufferGetNumSamples(sampleBuffer),
+            srcPresentationTimeStamp: CMSampleBufferGetPresentationTimeStamp(sampleBuffer),
+            srcDuration: CMSampleBufferGetDuration(sampleBuffer),
             channelMap: channelMap,
             outputChannelCount: outputChannelCount,
             outputType: outputType
@@ -269,7 +314,8 @@ extension CaptureWriter {
     
     private func createOutputBuffer(audioProps: AudioProperties) -> BufferInfo? {
         // Calculate output buffer size based on output type
-        let inputBufferSize = CMBlockBufferGetDataLength(audioProps.inBlockBuffer)
+        guard let inBlockBuffer = audioProps.inBlockBuffer else { return nil }
+        let inputBufferSize = CMBlockBufferGetDataLength(inBlockBuffer)
         let inputBytesPerFrame = audioProps.inputChannelCount * audioProps.bytesPerSample
         let outputBufferSize: Int
         let outputBytesPerFrame = audioProps.outputChannelCount * audioProps.bytesPerSample
@@ -288,16 +334,18 @@ extension CaptureWriter {
         
         // Create BufferInfo using the helper function
         return createBufferInfo(
-            inputBuffer: audioProps.inBlockBuffer,
+            inputBuffer: inBlockBuffer,
             outputBuffer: contiguousOutputBuffer
         )
     }
     
     /// Helper function to create BufferInfo from input and output CMBlockBuffers
     private func createBufferInfo(
-        inputBuffer: CMBlockBuffer,
+        inputBuffer: CMBlockBuffer?,
         outputBuffer: CMBlockBuffer
     ) -> BufferInfo? {
+        guard let inputBuffer = inputBuffer else { return nil }
+        
         var inDataPtr: UnsafeMutablePointer<Int8>? = nil
         var outDataPtr: UnsafeMutablePointer<Int8>? = nil
         
@@ -347,14 +395,14 @@ extension CaptureWriter {
     }
     
     private func performChannelRemappingGeneric<T: FixedWidthInteger>(T: T.Type, audioProps: AudioProperties, channelMap: [Int], bufferInfo: BufferInfo) {
-        let inputNumSamples = audioProps.frameCount * audioProps.inputChannelCount
+        let inputNumSamples = audioProps.srcFrameCount * audioProps.inputChannelCount
         let inSamples = bufferInfo.inputData.withMemoryRebound(to: T.self, capacity: inputNumSamples) { $0 }
         
         if audioProps.outputType == .descriptions8Ch {
             // For descriptions8Ch output, use same buffer size and channel count (8 channels)
             let outSamples = bufferInfo.outputData.withMemoryRebound(to: T.self, capacity: inputNumSamples) { $0 }
             
-            for frame in 0..<audioProps.frameCount {
+            for frame in 0..<audioProps.srcFrameCount {
                 for outChannel in 0..<8 {
                     let inChannel = outChannel < channelMap.count ? channelMap[outChannel] : -1
                     let outIndex = frame * 8 + outChannel
@@ -367,14 +415,24 @@ extension CaptureWriter {
             }
         } else {
             // For Tag-based output, use smaller buffer size based on output channel count
-            let outputSamples = audioProps.frameCount * audioProps.outputChannelCount
+            let outputSamples = audioProps.srcFrameCount * audioProps.outputChannelCount
             let outSamples = bufferInfo.outputData.withMemoryRebound(to: T.self, capacity: outputSamples) { $0 }
             
-            for frame in 0..<audioProps.frameCount {
-                for outChannel in 0..<audioProps.outputChannelCount {
+            // Add bounds checking to prevent OutOfIndex
+            let safeChannelCount = min(audioProps.outputChannelCount, channelMap.count)
+            
+            for frame in 0..<audioProps.srcFrameCount {
+                for outChannel in 0..<safeChannelCount {
                     let inChannel = channelMap[outChannel]
+                    // Add bounds checking for input channel access
+                    guard inChannel >= 0 && inChannel < audioProps.inputChannelCount else { continue }
+                    
                     let outIndex = frame * audioProps.outputChannelCount + outChannel
                     let inIndex = frame * audioProps.inputChannelCount + inChannel
+                    
+                    // Additional bounds checking for sample buffer access
+                    guard outIndex < outputSamples && inIndex < inputNumSamples else { continue }
+                    
                     outSamples[outIndex] = inSamples[inIndex]
                 }
             }
@@ -385,38 +443,19 @@ extension CaptureWriter {
     
     private func createOutputSampleBuffer(audioProps: AudioProperties, outputBuffer: CMBlockBuffer) -> CMSampleBuffer? {
         // Create output audio format description
-        var outFormatDesc: CMAudioFormatDescription? = nil
-        // Modify ASBD for output channel count
-        var outASBD = audioProps.asbd
-        outASBD.mChannelsPerFrame = UInt32(audioProps.outputChannelCount)
-        outASBD.mBytesPerFrame = UInt32(audioProps.outputChannelCount * audioProps.bytesPerSample)
-        outASBD.mBytesPerPacket = outASBD.mBytesPerFrame // For LPCM, packet = frame
-        
-        // Create AudioChannelLayout using AudioChannelDescriptions for 8 channels
-        guard let outputLayoutData = createOutputAudioChannelLayout(audioProps: audioProps, channelMap: audioProps.channelMap) else {
+        guard let outFormatDesc = createRemappedAudioFormatDescription(
+            from: audioProps.asbd,
+            layout: audioProps.layoutPtr,
+            outputType: audioProps.outputType
+        ) else {
             return nil
         }
-        
-        let layoutPtr = outputLayoutData.bytes.bindMemory(to: AudioChannelLayout.self, capacity: 1)
-        let layoutSize = outputLayoutData.length
-        let createFormatStatus = CMAudioFormatDescriptionCreate(
-            allocator: nil,
-            asbd: &outASBD,
-            layoutSize: layoutSize,
-            layout: layoutPtr,
-            magicCookieSize: 0,
-            magicCookie: nil,
-            extensions: nil,
-            formatDescriptionOut: &outFormatDesc
-            )
-        
-        guard createFormatStatus == noErr, let outFormatDesc = outFormatDesc else { return nil }
         
         // Create output sample buffer
         var outSampleBuffer: CMSampleBuffer? = nil
         var timingInfo = CMSampleTimingInfo(
-            duration: audioProps.duration,
-            presentationTimeStamp: audioProps.presentationTimeStamp,
+            duration: audioProps.srcDuration,
+            presentationTimeStamp: audioProps.srcPresentationTimeStamp,
             decodeTimeStamp: CMTime.invalid
         )
         
@@ -424,7 +463,7 @@ extension CaptureWriter {
             allocator: nil,
             dataBuffer: outputBuffer,
             formatDescription: outFormatDesc,
-            sampleCount: audioProps.sampleCount,
+            sampleCount: audioProps.srcSampleCount,
             sampleTimingEntryCount: 1,
             sampleTimingArray: &timingInfo,
             sampleSizeEntryCount: 0,
@@ -440,40 +479,79 @@ extension CaptureWriter {
     // MARK: - AudioChannelLayout Helper Functions
     /* ============================================ */
     
-    /// Defines the output type for AudioChannelLayout creation
-    internal enum AudioChannelLayoutOutputType {
-        case descriptions8Ch    // AudioChannelDescriptions with 8 channels (existing behavior)
-        case tag3Ch            // AudioChannelLayoutTag for 3ch (AAC_3_0)
-        case tag5_1Ch          // AudioChannelLayoutTag for 5.1ch (AAC_5_1)
-        case tag7_1Ch          // AudioChannelLayoutTag for 7.1ch (AAC_7_1)
+    /// Create a remapped CMAudioFormatDescription based on the output type.
+    /// - Parameters:
+    ///   - from: The source AudioStreamBasicDescription.
+    ///   - layout: A pointer to the source AudioChannelLayout.
+    ///   - outputType: The target output type for the new format description.
+    /// - Returns: A new `CMAudioFormatDescription` remapped for the specified output type, or `nil` on failure.
+    internal func createRemappedAudioFormatDescription(from asbd: AudioStreamBasicDescription, layout: UnsafePointer<AudioChannelLayout>, outputType: AudioChannelLayoutOutputType) -> CMAudioFormatDescription? {
+        // 1. Count valid channels and determine if the layout is reverse34
+        let validChannelCount = countValidChannels(layoutPtr: layout)
+        let isReverse34 = hasReverse34Layout(layoutPtr: layout, validChannelCount: validChannelCount)
         
-        /// Get the number of output channels for this layout type
-        var outputChannelCount: Int {
-            switch self {
-            case .descriptions8Ch:
-                return 8
-            case .tag3Ch:
-                return 3
-            case .tag5_1Ch:
-                return 6
-            case .tag7_1Ch:
-                return 8
-            }
+        // 2. Determine the channel map based on the valid channel count and reverse34 layout
+        let channelMap: [Int]
+        switch validChannelCount {
+        case 2: // 2ch stereo
+            channelMap = [0, 1] // L R
+        case 3:
+            channelMap = isReverse34 ? [3, 0, 1] : [2, 0, 1] // C L R
+        case 6: // 5.1ch
+            channelMap = isReverse34 ? [3, 0, 1, 4, 5, 2] : [2, 0, 1, 4, 5, 3] // C L R Ls Rs LFE
+        case 8: // 7.1ch
+            channelMap = isReverse34 ? [3, 6, 7, 0, 1, 4, 5, 2] : [2, 6, 7, 0, 1, 4, 5, 3] // C Lc Rc L R Ls Rs LFE
+        default:
+            channelMap = []
         }
         
-        /// Get the appropriate AudioChannelLayoutTag for this layout type
-        var layoutTag: AudioChannelLayoutTag {
-            switch self {
-            case .descriptions8Ch:
-                return kAudioChannelLayoutTag_UseChannelDescriptions
-            case .tag3Ch:
-                return kAudioChannelLayoutTag_AAC_3_0
-            case .tag5_1Ch:
-                return kAudioChannelLayoutTag_AAC_5_1
-            case .tag7_1Ch:
-                return kAudioChannelLayoutTag_AAC_7_1
-            }
+        guard !channelMap.isEmpty else { return nil }
+        
+        // 3. Create the output AudioChannelLayout data
+        let audioProps = AudioProperties(
+            asbd: asbd,
+            layoutPtr: layout,
+            inputChannelCount: Int(asbd.mChannelsPerFrame),
+            validChannelCount: validChannelCount,
+            bytesPerSample: Int(asbd.mBitsPerChannel) / 8,
+            srcFrameCount: 0,
+            inBlockBuffer: nil, // Not needed for format description creation
+            srcSampleCount: 0,
+            srcPresentationTimeStamp: .invalid,
+            srcDuration: .invalid,
+            channelMap: channelMap,
+            outputChannelCount: outputType.outputChannelCount,
+            outputType: outputType
+        )
+        
+        guard let outputLayoutData = createOutputAudioChannelLayout(audioProps: audioProps, channelMap: channelMap) else {
+            return nil
         }
+        
+        // 4. Modify the ASBD for the output format
+        var outASBD = asbd
+        outASBD.mChannelsPerFrame = UInt32(outputType.outputChannelCount)
+        outASBD.mBytesPerFrame = UInt32(outputType.outputChannelCount * (Int(asbd.mBitsPerChannel) / 8))
+        outASBD.mBytesPerPacket = outASBD.mBytesPerFrame // For LPCM, packet = frame
+        
+        // 5. Create the final CMAudioFormatDescription
+        var outFormatDesc: CMAudioFormatDescription?
+        let layoutPtr = outputLayoutData.bytes.bindMemory(to: AudioChannelLayout.self, capacity: 1)
+        let layoutSize = outputLayoutData.length
+        
+        let status = CMAudioFormatDescriptionCreate(
+            allocator: nil,
+            asbd: &outASBD,
+            layoutSize: layoutSize,
+            layout: layoutPtr,
+            magicCookieSize: 0,
+            magicCookie: nil,
+            extensions: nil,
+            formatDescriptionOut: &outFormatDesc
+        )
+        
+        guard status == noErr else { return nil }
+        return outFormatDesc
     }
     
     /// Calculate the size needed for AudioChannelLayout with specified number of channel descriptions
@@ -611,8 +689,9 @@ extension CaptureWriter {
             )
         }
         
-        // Remap channel descriptions based on channel map
-        for outChannel in 0..<channelMap.count {
+        // Remap channel descriptions based on channel map with bounds checking
+        let safeChannelMapCount = min(channelMap.count, 8) // Ensure we don't exceed 8 channels
+        for outChannel in 0..<safeChannelMapCount {
             let inChannel = channelMap[outChannel]
             if inChannel >= 0 && inChannel < 8 {
                 outputDescPtr.advanced(by: outChannel).pointee = inputDescPtr.advanced(by: inChannel).pointee
@@ -620,6 +699,17 @@ extension CaptureWriter {
         }
         
         return true
+    }
+    
+    /* ============================================ */
+    // MARK: - AudioFormatID Utility Functions
+    /* ============================================ */
+    
+    /// Check if the given format ID is part of the AAC family.
+    /// - Parameter formatID: The AudioFormatID to check
+    /// - Returns: true if the format ID is part of the AAC family, false otherwise
+    private func isAACFamily(_ formatID: UInt32) -> Bool {
+        return (formatID >= kAudioFormatMPEG4AAC && formatID <= kAudioFormatMPEG4AAC_HE_V2)
     }
     
     /* ============================================ */
@@ -701,5 +791,106 @@ extension CaptureWriter {
         
         return result
     }
-
+    
+    /* ============================================ */
+    // MARK: - Public Audio Format Description Creation
+    /* ============================================ */
+    
+    /// Create a CMFormatDescription for remapped audio based on the output type and source format.
+    /// This function is designed to be called from prepareInputMedia() to create appropriate format hints
+    /// for AVAssetWriterInput when audio remapping is required.
+    /// - Parameters:
+    ///   - sourceFormatDescription: The source CMFormatDescription containing the original audio format
+    ///   - outputType: The desired output type for AudioChannelLayout creation
+    /// - Returns: A new CMFormatDescription suitable for the remapped audio, or nil if creation fails
+    /// - Note: This function determines the appropriate output type based on the source format's channel count
+    ///         and creates a format description that matches what remapLPCMChannelOrderForAAC will produce.
+    public func createRemappedFormatDescription(
+        from sourceFormatDescription: CMFormatDescription,
+        outputType: AudioChannelLayoutOutputType? = nil
+    ) -> CMFormatDescription? {
+        // Extract source format information
+        guard let asbd_p = CMAudioFormatDescriptionGetStreamBasicDescription(sourceFormatDescription),
+              let acl_p = CMAudioFormatDescriptionGetChannelLayout(sourceFormatDescription, sizeOut: nil) else {
+            return nil
+        }
+        
+        let validChannelCount = countValidChannels(layoutPtr: acl_p)
+        
+        // Determine the appropriate output type if not specified
+        let finalOutputType: AudioChannelLayoutOutputType
+        if let outputType = outputType {
+            finalOutputType = outputType
+        } else {
+            // Auto-determine based on channel count
+            switch validChannelCount {
+            case 2:
+                finalOutputType = .tag2Ch
+            case 3:
+                finalOutputType = .tag3Ch
+            case 6:
+                finalOutputType = .tag5_1Ch
+            case 8:
+                finalOutputType = .tag7_1Ch
+            default:
+                // For other channel counts, use descriptions8Ch (no remapping needed)
+                finalOutputType = .descriptions8Ch
+            }
+        }
+        
+        // For mono audio, or when using descriptions8Ch without actual remapping needed,
+        // return the original format description
+        if validChannelCount <= 1 || (finalOutputType == .descriptions8Ch && validChannelCount <= 2) {
+            return sourceFormatDescription
+        }
+        
+        // Create remapped format description using the existing internal function
+        return createRemappedAudioFormatDescription(
+            from: asbd_p.pointee,
+            layout: acl_p,
+            outputType: finalOutputType
+        )
+    }
+    
+    /// Determine the appropriate AudioChannelLayoutOutputType based on source audio format and encoding settings.
+    /// This is a convenience function to help decide which output type should be used for remapping.
+    /// - Parameters:
+    ///   - sourceFormatDescription: The source CMFormatDescription containing the original audio format
+    ///   - forAAC: Whether the output is intended for AAC encoding (affects output type selection)
+    /// - Returns: The recommended AudioChannelLayoutOutputType, or nil if no remapping is needed
+    public func determineOutputType(
+        from sourceFormatDescription: CMFormatDescription,
+        forAAC: Bool = true
+    ) -> AudioChannelLayoutOutputType? {
+        guard let acl_p = CMAudioFormatDescriptionGetChannelLayout(sourceFormatDescription, sizeOut: nil) else {
+            return nil
+        }
+        
+        let validChannelCount = countValidChannels(layoutPtr: acl_p)
+        
+        // For mono, no remapping is needed
+        guard validChannelCount > 1 else {
+            return nil
+        }
+        
+        // Select appropriate output type based on channel count and encoding format
+        if forAAC {
+            // For AAC encoding, prefer tag-based layouts
+            switch validChannelCount {
+            case 2:
+                return .tag2Ch
+            case 3:
+                return .tag3Ch
+            case 6:
+                return .tag5_1Ch
+            case 8:
+                return .tag7_1Ch
+            default:
+                return .descriptions8Ch
+            }
+        } else {
+            // For other encodings, use descriptions8Ch
+            return .descriptions8Ch
+        }
+    }
 }

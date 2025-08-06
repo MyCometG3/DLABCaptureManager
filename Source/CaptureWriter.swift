@@ -146,8 +146,8 @@ actor CaptureWriter: NSObject {
     public var encodeAudio : Bool = false
     /// Set AudioCodec ID as kAudioFormatXXX.
     public var encodeAudioFormatID : AudioFormatID = kAudioFormatMPEG4AAC
-    /// Set Audio target bitrate. default is 256 * 1024 bps.
-    public var encodeAudioBitrate : UInt = 256 * 1024
+    /// Set Audio target bitrate. default is 256 * 1000 bps.
+    public var encodeAudioBitrate : UInt = 256 * 1000
     /// Set YES to encode video.
     public var encodeVideo : Bool = true
     /// Set YES to use ProRes422 for video. No to use other codec like Apple H.264.
@@ -193,6 +193,9 @@ actor CaptureWriter: NSObject {
             cache.assetWriterInputTimecode = avAssetWriterInputTimecode
         }
     }
+    
+    /// The determined output type for audio channel layout, used for remapping.
+    private var audioChannelLayoutOutputType: AudioChannelLayoutOutputType = .descriptions8Ch
     
     /// CaptureWriter cache w/ nonisolated func support
     nonisolated private let cache = CaptureWriterCache()
@@ -472,56 +475,45 @@ actor CaptureWriter: NSObject {
     // MARK: -
     /* ============================================ */
     
-    private func writeAudioSampleBuffer(_ sampleBuffer: CMSampleBuffer) throws {
-        // For MPEG4 AAC encoding, remap the channel order
-        if encodeAudio, encodeAudioFormatID == kAudioFormatMPEG4AAC {
-            guard let avAssetWriterInputAudio, avAssetWriterInputAudio.isReadyForMoreMediaData else {
+    fileprivate func writeAudioSampleBufferCore(_ sampleBuffer: CMSampleBuffer) throws {
+        guard let avAssetWriterInputAudio = avAssetWriterInputAudio else {
+            let reason = "ERROR: AVAssetWriterInputAudio is not available."
+            throw CaptureWriterError.unsupportedMediaType(reason)
+        }
+        guard avAssetWriterInputAudio.isReadyForMoreMediaData else {
+            let reason = "ERROR: AVAssetWriterInputAudio is not ready to append."
+            throw CaptureWriterError.audioSampleBufferAppendFailed(reason)
+        }
+        
+        //
+        updateTimeStamp(sampleBuffer)
+        let result = avAssetWriterInputAudio.append(sampleBuffer)
+        
+        if !result {
+            if let avAssetWriter = avAssetWriter, let error = avAssetWriter.error {
+                let reason = error.localizedDescription
+                throw CaptureWriterError.audioSampleBufferAppendFailed(reason)
+            } else {
                 let statusStr : String = descriptionForStatus(avAssetWriter?.status ?? .unknown)
                 let reason = "ERROR: Could not write audio sample buffer.(\(statusStr))"
                 throw CaptureWriterError.audioSampleBufferAppendFailed(reason)
             }
-            if let remappedBuffer = remapLPCMChannelOrderForAAC(sampleBuffer) {
-                let result = avAssetWriterInputAudio.append(remappedBuffer)
-                if !result {
-                    if let avAssetWriter = avAssetWriter, let error = avAssetWriter.error {
-                        let reason = error.localizedDescription
-                        throw CaptureWriterError.audioSampleBufferAppendFailed(reason)
-                    } else {
-                        let statusStr : String = descriptionForStatus(avAssetWriter?.status ?? .unknown)
-                        let reason = "ERROR: Could not write audio sample buffer.(\(statusStr))"
-                        throw CaptureWriterError.audioSampleBufferAppendFailed(reason)
-                    }
-                }
-            } else {
+        }
+    }
+    
+    private func writeAudioSampleBuffer(_ sampleBuffer: CMSampleBuffer) throws {
+        // For MPEG4 AAC encoding, remap the channel order
+        if encodeAudio, isAACFamily(encodeAudioFormatID) {
+            guard let remappedBuffer = remapLPCMChannelOrderForAAC(sampleBuffer, self.audioChannelLayoutOutputType) else {
                 let reason = "ERROR: Could not remap audio sample buffer."
                 throw CaptureWriterError.audioSampleBufferAppendFailed(reason)
             }
-            return
-        }
-        
-        if let avAssetWriterInputAudio = avAssetWriterInputAudio {
-            if avAssetWriterInputAudio.isReadyForMoreMediaData {
-                //
-                updateTimeStamp(sampleBuffer)
-                let result = avAssetWriterInputAudio.append(sampleBuffer)
-                
-                if !result {
-                    if let avAssetWriter = avAssetWriter, let error = avAssetWriter.error {
-                        let reason = error.localizedDescription
-                        throw CaptureWriterError.audioSampleBufferAppendFailed(reason)
-                    } else {
-                        let statusStr : String = descriptionForStatus(avAssetWriter?.status ?? .unknown)
-                        let reason = "ERROR: Could not write audio sample buffer.(\(statusStr))"
-                        throw CaptureWriterError.audioSampleBufferAppendFailed(reason)
-                    }
-                }
-            } else {
-                let reason = "ERROR: AVAssetWriterInputAudio is not ready to append."
-                throw CaptureWriterError.audioSampleBufferAppendFailed(reason)
-            }
+            
+            //
+            try writeAudioSampleBufferCore(remappedBuffer)
         } else {
-            let reason = "ERROR: AVAssetWriterInputAudio is not available."
-            throw CaptureWriterError.unsupportedMediaType(reason)
+            //
+            try writeAudioSampleBufferCore(sampleBuffer)
         }
     }
     
@@ -616,10 +608,32 @@ actor CaptureWriter: NSObject {
             } else {
                 // Create OutputSettings for Audio (Compress)
                 let audioOutputSettings : [String:Any] = createOutputSettingsAudio()
+                
+                var finalSourceAudioFormatDescription = sourceAudioFormatDescription
+                
+                // For AAC encoding, the source format hint might need to be remapped
+                // to match what remapLPCMChannelOrderForAAC will produce.
+                if isAACFamily(encodeAudioFormatID), let sourceFD = sourceAudioFormatDescription {
+                    // Use the new createRemappedFormatDescription function
+                    if let remappedFormatDescription = createRemappedFormatDescription(from: sourceFD) {
+                        finalSourceAudioFormatDescription = remappedFormatDescription
+                        
+                        // Update audioChannelLayoutOutputType based on the determined output type
+                        if let outputType = determineOutputType(from: sourceFD, forAAC: true) {
+                            self.audioChannelLayoutOutputType = outputType
+                        } else {
+                            self.audioChannelLayoutOutputType = .descriptions8Ch
+                        }
+                    } else {
+                        // Fallback to original format description if remapping fails
+                        self.audioChannelLayoutOutputType = .descriptions8Ch
+                    }
+                }
+                
                 if avAssetWriter.canApply(outputSettings: audioOutputSettings, forMediaType: AVMediaType.audio) {
                     avAssetWriterInputAudio = AVAssetWriterInput(mediaType: AVMediaType.audio,
                                                                  outputSettings: audioOutputSettings,
-                                                                 sourceFormatHint: sourceAudioFormatDescription)
+                                                                 sourceFormatHint: finalSourceAudioFormatDescription)
                 } else {
                     throw CaptureWriterError.invalidAudioOutputSettings
                 }
@@ -850,7 +864,7 @@ actor CaptureWriter: NSObject {
         
         // Clipping for kAudioFormatMPEG4AAC
         let formatID = audioOutputSettings[AVFormatIDKey] as? Int
-        if let formatID, formatID == Int(kAudioFormatMPEG4AAC) {
+        if let formatID, isAACFamily(UInt32(formatID)) {
             let sampleRate = audioOutputSettings[AVSampleRateKey] as? Float
             let channelCount = audioOutputSettings[AVNumberOfChannelsKey] as? Int
             let bitRate = audioOutputSettings[AVEncoderBitRateKey] as? Int
@@ -862,17 +876,29 @@ actor CaptureWriter: NSObject {
             if let channelCount, let bitRate {
                 if channelCount <= 2 {
                     // kAudioFormatMPEG4AAC w/ 2ch runs up to 320Kbps
-                    let clippedValue = bitRate.clipped(to: 80_000...320_000)
+                    let clippedValue = bitRate.clipped(to: 32_000...320_000)
                     audioOutputSettings[AVEncoderBitRateKey] = clippedValue
                 }
                 if channelCount > 2 {
-                    // kAudioFormatMPEG4AAC w/ 5.1ch runs up to 640Kbps
-                    let clippedValue = bitRate.clipped(to: 384_000...640_000)
-                    audioOutputSettings[AVEncoderBitRateKey] = clippedValue
-                    
                     // Use channel count from AudioChannelLayout if available
                     let validCount = (aclChannelCount ?? (avafChannelCount ?? channelCount))
                     audioOutputSettings[AVNumberOfChannelsKey] = validCount
+                    
+                    // Apply bitrate clipping
+                    if validCount <= 2 {
+                        // AAC-LC, HE-AAC, or HE-AACv2
+                        let clippedValue = bitRate.clipped(to: 32_000...320_000)
+                        audioOutputSettings[AVEncoderBitRateKey] = clippedValue
+                    }
+                    if validCount > 2 {
+                        // AAC-LC Only
+                        let range = queryBitrateRange(channelCount: validCount)
+                        let clippedValue = bitRate.clipped(to: range.min...range.max)
+                        audioOutputSettings[AVEncoderBitRateKey] = clippedValue
+                        
+                        // Ensure AAC-LC
+                        audioOutputSettings[AVFormatIDKey] = kAudioFormatMPEG4AAC
+                    }
                     
                     // Remove source acl because of incompatibility w/ kAudioFormatMPEG4AAC
                     audioOutputSettings[AVChannelLayoutKey] = nil
@@ -880,6 +906,8 @@ actor CaptureWriter: NSObject {
                     // Create appropriate AudioChannelLayout for AAC encoding
                     let layoutTag: AudioChannelLayoutTag
                     switch validCount {
+                    case 2:
+                        layoutTag = kAudioChannelLayoutTag_Stereo // L R
                     case 3:
                         layoutTag = kAudioChannelLayoutTag_MPEG_3_0_B // C L R
                     case 6: // 5.1ch
@@ -914,8 +942,24 @@ actor CaptureWriter: NSObject {
     // MARK: -
     /* ============================================ */
     
+    /// Check if the given format ID is part of the AAC family.
+    /// - Parameter formatID: The AudioFormatID to check
+    /// - Returns: true if the format ID is part of the AAC family, false otherwise
+    private func isAACFamily(_ formatID: UInt32) -> Bool {
+        return (formatID >= kAudioFormatMPEG4AAC && formatID <= kAudioFormatMPEG4AAC_HE_V2)
+    }
+    
+    /// AAC encoder bitrate range
+    private func queryBitrateRange<T: BinaryInteger>(channelCount: T) -> (min: T, max: T) {
+        precondition(channelCount > 0, "Channel count must be positive")
+        let channelCountWithoutLFE: T = (channelCount > 5) ? (channelCount - 1) : channelCount
+        let minRate = 40_000 * channelCountWithoutLFE
+        let maxRate = 160_000 * channelCountWithoutLFE
+        return (min: minRate, max: maxRate)
+    }
+    
     private func descriptionForStatus(_ status :AVAssetWriter.Status) -> String {
-        // In case of faulty state
+        // In case of faulty status
         let statusArray : [AVAssetWriter.Status : String] = [
             .unknown    : "AVAssetWriterStatus.Unknown",
             .writing    : "AVAssetWriterStatus.Writing",
