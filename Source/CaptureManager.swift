@@ -73,7 +73,14 @@ extension CaptureManager: @unchecked Sendable {
             semaphore.signal()
         }
         semaphore.wait()
-        return try lock.sync { try result!.get() }
+        return try lock.sync { 
+            guard let result = result else {
+                throw NSError(domain: "com.MyCometG3.DLABCaptureManager.ErrorDomain", 
+                             code: -1, 
+                             userInfo: [NSLocalizedDescriptionKey: "Async operation failed to complete"])
+            }
+            return try result.get() 
+        }
     }
     
     /// Executes an asynchronous, non-throwing operation synchronously using a detached task.
@@ -93,7 +100,12 @@ extension CaptureManager: @unchecked Sendable {
             semaphore.signal()
         }
         semaphore.wait()
-        return lock.sync { result! }
+        return lock.sync { 
+            guard let result = result else {
+                fatalError("Async operation failed to complete - this should never happen for non-throwing operations")
+            }
+            return result 
+        }
     }
 }
 
@@ -109,7 +121,7 @@ public class CaptureManager: NSObject, DLABInputCaptureDelegate {
     public private(set) var running :Bool = false
     
     /// Capture device as DLABDevice object
-    public var currentDevice :DLABDevice? = nil
+    public var currentDevice: DLABDevice? = nil
     
     /* ============================================ */
     // MARK: - properties - Capturing audio
