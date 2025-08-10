@@ -356,6 +356,9 @@ public class CaptureVideoPreview: NSView, CALayerDelegate {
             sampleProductionSize = sbHelper.sampleProductionSize
             printVerbose("CaptureVideoPreview.\(#function)",
                          "INFO: Update video sample property.")
+            
+            // Ensure latest SampleRect/AspectRatio applied
+            needsDisplay = true
         }
         
         // Debugging
@@ -523,6 +526,9 @@ public class CaptureVideoPreview: NSView, CALayerDelegate {
                 } else {
                     requestAspect = (proSize.width / proSize.height)
                 }
+            } else {
+                printDebug("CaptureVideoPreview.\(#function)",
+                           "WARNING: sampleEncodedSize or sampleProductionSize is not available.")
             }
             
             let adjustRatio :CGFloat = requestAspect / viewAspect
