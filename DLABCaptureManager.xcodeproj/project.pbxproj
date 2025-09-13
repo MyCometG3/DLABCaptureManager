@@ -3,7 +3,7 @@
 	archiveVersion = 1;
 	classes = {
 	};
-	objectVersion = 54;
+	objectVersion = 90;
 	objects = {
 
 /* Begin PBXBuildFile section */
@@ -39,11 +39,9 @@
 /* Begin PBXFrameworksBuildPhase section */
 		16DC282B1F9C2C0C008AA3A2 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
-			buildActionMask = 2147483647;
 			files = (
 				168CD3311F9EA1980098EC35 /* DLABridging.framework in Frameworks */,
 			);
-			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXFrameworksBuildPhase section */
 
@@ -104,11 +102,9 @@
 /* Begin PBXHeadersBuildPhase section */
 		16DC282C1F9C2C0C008AA3A2 /* Headers */ = {
 			isa = PBXHeadersBuildPhase;
-			buildActionMask = 2147483647;
 			files = (
 				16DC28341F9C2C0C008AA3A2 /* DLABCaptureManager.h in Headers */,
 			);
-			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXHeadersBuildPhase section */
 
@@ -123,8 +119,6 @@
 				16DC282D1F9C2C0C008AA3A2 /* Resources */,
 			);
 			buildRules = (
-			);
-			dependencies = (
 			);
 			name = DLABCaptureManager;
 			productName = DLABCaptureManager;
@@ -149,7 +143,6 @@
 				};
 			};
 			buildConfigurationList = 16DC28291F9C2C0C008AA3A2 /* Build configuration list for PBXProject "DLABCaptureManager" */;
-			compatibilityVersion = "Xcode 8.0";
 			developmentRegion = en;
 			hasScannedForEncodings = 0;
 			knownRegions = (
@@ -157,6 +150,7 @@
 				Base,
 			);
 			mainGroup = 16DC28251F9C2C0C008AA3A2;
+			preferredProjectObjectVersion = 90;
 			productRefGroup = 16DC28301F9C2C0C008AA3A2 /* Products */;
 			projectDirPath = "";
 			projectRoot = "";
@@ -169,17 +163,14 @@
 /* Begin PBXResourcesBuildPhase section */
 		16DC282D1F9C2C0C008AA3A2 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
-			buildActionMask = 2147483647;
 			files = (
 			);
-			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
 		16DC282A1F9C2C0C008AA3A2 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
-			buildActionMask = 2147483647;
 			files = (
 				16DC28401F9C2C1C008AA3A2 /* CaptureTimecodeHelper.swift in Sources */,
 				16DC28421F9C2C1C008AA3A2 /* CaptureManager.swift in Sources */,
@@ -191,12 +182,11 @@
 				16DC28411F9C2C1C008AA3A2 /* CaptureAudioPreview.swift in Sources */,
 				160397511FA819CF000ED345 /* CaptureVideoPreview.swift in Sources */,
 			);
-			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXSourcesBuildPhase section */
 
 /* Begin XCBuildConfiguration section */
-		16DC28351F9C2C0C008AA3A2 /* Debug */ = {
+		16DC28351F9C2C0C008AA3A2 /* Debug configuration for PBXProject "DLABCaptureManager" */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
@@ -263,7 +253,7 @@
 			};
 			name = Debug;
 		};
-		16DC28361F9C2C0C008AA3A2 /* Release */ = {
+		16DC28361F9C2C0C008AA3A2 /* Release configuration for PBXProject "DLABCaptureManager" */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
@@ -323,7 +313,7 @@
 			};
 			name = Release;
 		};
-		16DC28381F9C2C0C008AA3A2 /* Debug */ = {
+		16DC28381F9C2C0C008AA3A2 /* Debug configuration for PBXNativeTarget "DLABCaptureManager" */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				BUILD_LIBRARY_FOR_DISTRIBUTION = YES;
@@ -355,7 +345,7 @@
 			};
 			name = Debug;
 		};
-		16DC28391F9C2C0C008AA3A2 /* Release */ = {
+		16DC28391F9C2C0C008AA3A2 /* Release configuration for PBXNativeTarget "DLABCaptureManager" */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				BUILD_LIBRARY_FOR_DISTRIBUTION = YES;
@@ -393,19 +383,17 @@
 		16DC28291F9C2C0C008AA3A2 /* Build configuration list for PBXProject "DLABCaptureManager" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
-				16DC28351F9C2C0C008AA3A2 /* Debug */,
-				16DC28361F9C2C0C008AA3A2 /* Release */,
+				16DC28351F9C2C0C008AA3A2 /* Debug configuration for PBXProject "DLABCaptureManager" */,
+				16DC28361F9C2C0C008AA3A2 /* Release configuration for PBXProject "DLABCaptureManager" */,
 			);
-			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
 		16DC28371F9C2C0C008AA3A2 /* Build configuration list for PBXNativeTarget "DLABCaptureManager" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
-				16DC28381F9C2C0C008AA3A2 /* Debug */,
-				16DC28391F9C2C0C008AA3A2 /* Release */,
+				16DC28381F9C2C0C008AA3A2 /* Debug configuration for PBXNativeTarget "DLABCaptureManager" */,
+				16DC28391F9C2C0C008AA3A2 /* Release configuration for PBXNativeTarget "DLABCaptureManager" */,
 			);
-			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
