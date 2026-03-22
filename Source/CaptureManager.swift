@@ -280,6 +280,20 @@ public class CaptureManager: NSObject, DLABInputCaptureDelegate {
     public var timecodeSource :TimecodeType? = nil
     
     /* ============================================ */
+    // MARK: - properties - Capturing ancillary data
+    /* ============================================ */
+    
+    /// Input ancillary packet callback. Use `dataSpace` to distinguish VANC and HANC packets.
+    /// This is the preferred wrapper API for SDK 15.3+ ancillary packet capture.
+    public var inputAncillaryPacketHandler: InputAncillaryPacketHandler? = nil {
+        didSet {
+            if let device = currentDevice {
+                applyInputAncillaryPacketHandler(to: device)
+            }
+        }
+    }
+    
+    /* ============================================ */
     // MARK: - public init/deinit
     /* ============================================ */
     
@@ -412,6 +426,7 @@ public class CaptureManager: NSObject, DLABInputCaptureDelegate {
                 if (audioCaptureEnabled || videoCaptureEnabled) {
                     // Update inputVideoSetting
                     applyTimecodeSetting()
+                    applyInputAncillaryPacketHandler(to: device)
                     
                     // Start stream
                     device.inputDelegate = self
@@ -447,6 +462,7 @@ public class CaptureManager: NSObject, DLABInputCaptureDelegate {
                 running = false
                 try device.stopStreams()
                 device.inputDelegate = nil
+                clearInputAncillaryPacketHandler(from: device)
                 
                 // Disable Capture
                 if videoCaptureEnabled {
@@ -629,6 +645,7 @@ public class CaptureManager: NSObject, DLABInputCaptureDelegate {
             if isRunning, let device = device {
                 try? device.stopStreams()
                 device.inputDelegate = nil
+                device.inputAncillaryPacketHandler = nil
                 
                 if isVideoCaptureEnabled {
                     try? device.disableVideoInput()
@@ -674,6 +691,14 @@ public class CaptureManager: NSObject, DLABInputCaptureDelegate {
         let userInfo :[String:Any] = [NSLocalizedDescriptionKey:desc,
                                NSLocalizedFailureReasonErrorKey:reason]
         return NSError(domain: domain, code: code, userInfo: userInfo)
+    }
+    
+    private func applyInputAncillaryPacketHandler(to device: DLABDevice) {
+        device.inputAncillaryPacketHandler = inputAncillaryPacketHandler
+    }
+    
+    private func clearInputAncillaryPacketHandler(from device: DLABDevice) {
+        device.inputAncillaryPacketHandler = nil
     }
     
     private func calcTimescale() -> CMTimeScale {
