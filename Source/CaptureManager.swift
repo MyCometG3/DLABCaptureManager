@@ -172,6 +172,9 @@ public class CaptureManager: NSObject, DLABInputCaptureDelegate {
     /// Writer object for recording
     private var writer: CaptureWriter? = nil
     
+    /// Keep writer instance alive and pre-warm encoder/writer path between recordings.
+    private var writerPrepared: Bool = false
+    
     /// Optional. Set preferred output URL.
     public var movieURL: URL? = nil
     
@@ -491,17 +494,17 @@ public class CaptureManager: NSObject, DLABInputCaptureDelegate {
     /// Toggle recording using current session
     public func recordToggleAsync() async {
         if running {
-            if let writer = writer {
+            if recording {
                 printVerbose("CaptureManager.\(#function) - Stop recording...")
                 
                 // stop recording
-                await writer.closeSession()
+                if let writer = writer {
+                    await writer.closeSession()
+                    // keep last duration
+                    lastDuration = await writer.duration
+                }
                 
-                // keep last duration
-                lastDuration = await writer.duration
-                
-                // unref writer
-                self.writer = nil
+                writerPrepared = (writer != nil)
                 
                 if recording {
                     recording = false
@@ -516,39 +519,16 @@ public class CaptureManager: NSObject, DLABInputCaptureDelegate {
                 applyTimecodeSetting()
                 
                 // prepare writer
-                writer = CaptureWriter()
+                if writer == nil {
+                    writer = CaptureWriter()
+                    writerPrepared = false
+                }
                 
                 // start recording
                 if let writer = writer {
                     printVerbose("CaptureManager.\(#function) - Start recording...")
                     
-                    // prepare CaptureWriterConfig
-                    var config = await writer.getConfig()
-                    
-                    config.movieURL = movieURL
-                    config.prefix = prefix
-                    config.sampleTimescale = (sampleTimescale > 0 ? sampleTimescale : calcTimescale())
-                    
-                    config.encodeAudio = encodeAudio
-                    config.encodeAudioFormatID = encodeAudioFormatID
-                    config.encodeAudioBitrate = encodeAudioBitrate
-                    config.updateAudioSettings = updateAudioSettings
-                    
-                    config.videoStyle = videoStyle
-                    config.clapHOffset = Int(offset.x)
-                    config.clapVOffset = Int(offset.y)
-                    config.encodeVideo = encodeVideo
-                    config.encodeVideoBitrate = encodeVideoBitrate
-                    config.encodeVideoFrameRate = calcFPS()
-                    config.encodeProRes422 = encodeProRes422
-                    config.encodeVideoCodecType = encodeVideoCodecType
-                    config.fieldDetail = fieldDetail as String?
-                    config.updateVideoSettings = updateVideoSettings
-                    
-                    config.useTimecode = timecodeReady
-                    
-                    config.sourceVideoFormatDescription = currentDevice?.inputVideoSetting?.videoFormatDescription
-                    config.sourceAudioFormatDescription = currentDevice?.inputAudioSetting?.audioFormatDescription
+                    let config = makeWriterConfig(movieURL: movieURL, prefix: prefix)
                     
                     // apply CaptureWriterConfig
                     await writer.setConfig(config)
@@ -556,10 +536,12 @@ public class CaptureManager: NSObject, DLABInputCaptureDelegate {
                     
                     if await writer.isRecording {
                         recording = true
+                        writerPrepared = true
                         // print("NOTICE: Recording started")
                         
                         printVerbose("CaptureManager.\(#function) - Start recording completed")
                     } else {
+                        writerPrepared = false
                         printVerbose("ERROR: Failed to start recording")
                     }
                 } else {
@@ -568,6 +550,51 @@ public class CaptureManager: NSObject, DLABInputCaptureDelegate {
             }
         } else {
             printVerbose("ERROR: device is not ready")
+        }
+    }
+    
+    /// Prepare writer/encoder pipeline ahead of first user recording start.
+    /// Safe to call repeatedly; it returns immediately when already prepared or recording.
+    @discardableResult
+    public func prewarmRecordingPathAsync() async -> Bool {
+        guard running, !recording else { return false }
+        guard writerPrepared == false else { return true }
+        
+        if writer == nil {
+            writer = CaptureWriter()
+        }
+        guard let writer = writer else { return false }
+        
+        prepTimecodeHelper()
+        applyTimecodeSetting()
+        
+        printVerbose("TRACE:CaptureManager.\(#function) - begin")
+        let tempURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("recdl-prewarm-\(UUID().uuidString).mov")
+        let config = makeWriterConfig(movieURL: tempURL, prefix: nil)
+        
+        await writer.setConfig(config)
+        await writer.openSession()
+        
+        guard await writer.isRecording else {
+            printVerbose("ERROR:CaptureManager.\(#function) - prewarm openSession failed")
+            writerPrepared = false
+            try? FileManager.default.removeItem(at: tempURL)
+            return false
+        }
+        
+        await writer.closeSession()
+        try? FileManager.default.removeItem(at: tempURL)
+        writerPrepared = true
+        printVerbose("TRACE:CaptureManager.\(#function) - completed")
+        return true
+    }
+    
+    /// Mark prewarmed writer path as stale due to configuration changes.
+    public func invalidateRecordingPreparation() {
+        writerPrepared = false
+        if !recording {
+            writer = nil
         }
     }
     
@@ -661,6 +688,37 @@ public class CaptureManager: NSObject, DLABInputCaptureDelegate {
             return fps
         }
         return 60.0 //
+    }
+    
+    private func makeWriterConfig(movieURL: URL?, prefix: String?) -> CaptureWriter.CaptureWriterConfig {
+        var config = CaptureWriter.CaptureWriterConfig()
+        
+        config.movieURL = movieURL
+        config.prefix = prefix
+        config.sampleTimescale = (sampleTimescale > 0 ? sampleTimescale : calcTimescale())
+        
+        config.encodeAudio = encodeAudio
+        config.encodeAudioFormatID = encodeAudioFormatID
+        config.encodeAudioBitrate = encodeAudioBitrate
+        config.updateAudioSettings = updateAudioSettings
+        
+        config.videoStyle = videoStyle
+        config.clapHOffset = Int(offset.x)
+        config.clapVOffset = Int(offset.y)
+        config.encodeVideo = encodeVideo
+        config.encodeVideoBitrate = encodeVideoBitrate
+        config.encodeVideoFrameRate = calcFPS()
+        config.encodeProRes422 = encodeProRes422
+        config.encodeVideoCodecType = encodeVideoCodecType
+        config.fieldDetail = fieldDetail as String?
+        config.updateVideoSettings = updateVideoSettings
+        
+        config.useTimecode = timecodeReady
+        config.traceStartupTiming = verbose
+        config.sourceVideoFormatDescription = currentDevice?.inputVideoSetting?.videoFormatDescription
+        config.sourceAudioFormatDescription = currentDevice?.inputAudioSetting?.audioFormatDescription
+        
+        return config
     }
     
     private func prepTimecodeHelper() {
