@@ -62,6 +62,12 @@ fileprivate final class CaptureWriterCache: @unchecked Sendable {
         set { withLock { isRecordingValue = newValue } }
     }
     
+    private var durationValue: Float64 = 0.0
+    var duration: Float64 {
+        get { withLock { durationValue } }
+        set { withLock { durationValue = newValue } }
+    }
+    
     private var avAssetWriterValue: AVAssetWriter? = nil
     var assetWriter: AVAssetWriter? {
         get { withLock { avAssetWriterValue } }
@@ -96,7 +102,11 @@ actor CaptureWriter: NSObject {
         }
     }
     /// Recording duration in sec.
-    public private(set) var duration : Float64 = 0.0
+    public private(set) var duration : Float64 = 0.0 {
+        didSet {
+            cache.duration = duration
+        }
+    }
     /// CMTime for start time.
     public private(set) var startTime : CMTime = CMTime.zero
     /// CMTime for end time.
@@ -199,6 +209,11 @@ actor CaptureWriter: NSObject {
     
     /// CaptureWriter cache w/ nonisolated func support
     nonisolated private let cache = CaptureWriterCache()
+    
+    /// Nonisolated, lock-protected snapshot of recording duration.
+    nonisolated var cachedDuration: Float64 {
+        cache.duration
+    }
     
     /* ============================================ */
     // MARK: - public init/deinit

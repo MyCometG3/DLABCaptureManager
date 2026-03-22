@@ -60,60 +60,6 @@ public enum TimecodeType: Int, Sendable {
 /// properties, but the class is designed to be used safely across actor boundaries
 /// through careful state management and synchronization.
 extension CaptureManager: @unchecked Sendable {
-    /// Executes an asynchronous, throwing operation synchronously using a detached task.
-    /// - Parameter block: A closure that performs asynchronous work and may throw.
-    /// - Returns: The result produced by the closure.
-    /// - Note: This method blocks the calling thread until the asynchronous work completes.
-    ///         It can be used from the main thread only if the operation does not rely on main-thread execution.
-    nonisolated func performAsync<T: Sendable>(_ block: @Sendable @escaping () async throws -> T) throws -> T {
-        let semaphore = DispatchSemaphore(value: 0)
-        let lock = DispatchQueue(label: "ResultLock")
-        var result: Result<T, Error>?
-        Task.detached(priority: .high) {
-            let taskResult: Result<T, Error>
-            do {
-                taskResult = .success(try await block())
-            } catch {
-                taskResult = .failure(error)
-            }
-            lock.sync {
-                result = taskResult
-            }
-            semaphore.signal()
-        }
-        semaphore.wait()
-        return try lock.sync {
-            guard let result = result else {
-                fatalError("Async operation failed to complete - this should never happen")
-            }
-            return try result.get()
-        }
-    }
-    
-    /// Executes an asynchronous, non-throwing operation synchronously using a detached task.
-    /// - Parameter block: A closure that performs asynchronous work.
-    /// - Returns: The result produced by the closure.
-    /// - Note: This method blocks the calling thread until the asynchronous work completes.
-    ///         It can be used from the main thread only if the operation does not rely on main-thread execution.
-    nonisolated func performAsync<T: Sendable>(_ block: @Sendable @escaping () async -> T) -> T {
-        let semaphore = DispatchSemaphore(value: 0)
-        let lock = DispatchQueue(label: "ResultLock")
-        var result: T?
-        Task.detached(priority: .high) {
-            let taskResult = await block()
-            lock.sync {
-                result = taskResult
-            }
-            semaphore.signal()
-        }
-        semaphore.wait()
-        return lock.sync {
-            guard let result = result else {
-                fatalError("Async operation failed to complete - this should never happen for non-throwing operations")
-            }
-            return result
-        }
-    }
 }
 
 public class CaptureManager: NSObject, DLABInputCaptureDelegate {
@@ -242,9 +188,7 @@ public class CaptureManager: NSObject, DLABInputCaptureDelegate {
     public var duration :Float64 {
         get {
             if let writer = writer {
-                return performAsync {
-                    await writer.duration
-                }
+                return writer.cachedDuration
             } else {
                 return lastDuration
             }
