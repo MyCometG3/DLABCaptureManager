@@ -169,6 +169,14 @@ public class CaptureManager: NSObject, DLABInputCaptureDelegate {
     /// True while recording
     public private(set) var recording: Bool = false
     
+    /// Protects the writer append gate across callback tasks and state transitions.
+    private let appendGateLock = UnfairLockBox()
+    private var appendGateOpenStorage: Bool = false
+    private var appendGateOpen: Bool {
+        get { appendGateLock.withLock { appendGateOpenStorage } }
+        set { appendGateLock.withLock { appendGateOpenStorage = newValue } }
+    }
+    
     /// Writer object for recording
     private var writer: CaptureWriter? = nil
     
@@ -512,6 +520,7 @@ public class CaptureManager: NSObject, DLABInputCaptureDelegate {
         if running {
             if recording {
                 printVerbose("CaptureManager.\(#function) - Stop recording...")
+                appendGateOpen = false
                 
                 // stop recording
                 if let writer = writer {
@@ -548,19 +557,23 @@ public class CaptureManager: NSObject, DLABInputCaptureDelegate {
                     
                     // apply CaptureWriterConfig
                     await writer.setConfig(config)
+                    appendGateOpen = false
                     await writer.openSession()
                     
                     if await writer.isRecording {
+                        appendGateOpen = true
                         recording = true
                         writerPrepared = true
                         // print("NOTICE: Recording started")
                         
                         printVerbose("CaptureManager.\(#function) - Start recording completed")
                     } else {
+                        appendGateOpen = false
                         writerPrepared = false
                         printVerbose("ERROR: Failed to start recording")
                     }
                 } else {
+                    appendGateOpen = false
                     printVerbose("ERROR: Writer is not available")
                 }
             }
@@ -608,6 +621,7 @@ public class CaptureManager: NSObject, DLABInputCaptureDelegate {
     
     /// Mark prewarmed writer path as stale due to configuration changes.
     public func invalidateRecordingPreparation() {
+        appendGateOpen = false
         writerPrepared = false
         if !recording {
             writer = nil
@@ -832,10 +846,12 @@ public class CaptureManager: NSObject, DLABInputCaptureDelegate {
     private func processCapturedAudioSampleAsync(_ info: UnsafeSampleBufferInfo) async {
         let sampleBuffer = info.sampleBuffer
         
-        if let writer = writer {
+        if appendGateOpen, let writer = writer {
             let wrapper = UnsafeSampleBufferWrapper(sampleBuffer: sampleBuffer)
             do {
-                try? await writer.appendSampleBuffer(wrapper: wrapper, mediaType: .audio)
+                try await writer.appendSampleBuffer(wrapper: wrapper, mediaType: .audio)
+            } catch {
+                printVerbose("ERROR:CaptureManager.\(#function) - audio append failed: \(error.localizedDescription)")
             }
         }
         if let audioPreview = audioPreview {
@@ -855,10 +871,12 @@ public class CaptureManager: NSObject, DLABInputCaptureDelegate {
         let sampleBuffer = info.sampleBuffer
         let setting = info.setting
         
-        if let writer = writer {
+        if appendGateOpen, let writer = writer {
             let wrapper = UnsafeSampleBufferWrapper(sampleBuffer: sampleBuffer)
             do {
-                try? await writer.appendSampleBuffer(wrapper: wrapper, mediaType: .video)
+                try await writer.appendSampleBuffer(wrapper: wrapper, mediaType: .video)
+            } catch {
+                printVerbose("ERROR:CaptureManager.\(#function) - video append failed: \(error.localizedDescription)")
             }
         }
         
@@ -875,10 +893,12 @@ public class CaptureManager: NSObject, DLABInputCaptureDelegate {
                 let timecodeSampleBuffer = setting.createTimecodeSample(in: timecodeFormatType,
                                                                         videoSample: sampleBuffer)
                 if let timecodeSampleBuffer = timecodeSampleBuffer {
-                    if let writer = writer {
+                    if appendGateOpen, let writer = writer {
                         let wrapper = UnsafeSampleBufferWrapper(sampleBuffer: timecodeSampleBuffer)
                         do {
-                            try? await writer.appendSampleBuffer(wrapper: wrapper, mediaType: .timecode)
+                            try await writer.appendSampleBuffer(wrapper: wrapper, mediaType: .timecode)
+                        } catch {
+                            printVerbose("ERROR:CaptureManager.\(#function) - device timecode append failed: \(error.localizedDescription)")
                         }
                     }
                     
@@ -894,10 +914,12 @@ public class CaptureManager: NSObject, DLABInputCaptureDelegate {
             if let timecodeSource = timecodeSource, timecodeSource == .CoreAudio, let timecodeHelper = timecodeHelper {
                 let timecodeSampleBuffer = timecodeHelper.createTimeCodeSample(from: sampleBuffer)
                 if let timecodeSampleBuffer = timecodeSampleBuffer {
-                    if let writer = writer {
+                    if appendGateOpen, let writer = writer {
                         let wrapper = UnsafeSampleBufferWrapper(sampleBuffer: timecodeSampleBuffer)
                         do {
-                            try? await writer.appendSampleBuffer(wrapper: wrapper, mediaType: .timecode)
+                            try await writer.appendSampleBuffer(wrapper: wrapper, mediaType: .timecode)
+                        } catch {
+                            printVerbose("ERROR:CaptureManager.\(#function) - core audio timecode append failed: \(error.localizedDescription)")
                         }
                     }
                     

@@ -12,10 +12,9 @@ import CoreVideo
 
 /// Thread safe backing store - works with deinit and nonisolated func.
 fileprivate final class CaptureVideoPreviewCache: @unchecked Sendable {
-    private let lock = NSLock()
+    private let lock = UnfairLockBox()
     private func withLock<T>(_ block: () -> T) -> T {
-        lock.lock(); defer { lock.unlock() }
-        return block()
+        lock.withLock(block)
     }
     
     private var preparedValue: Bool = false

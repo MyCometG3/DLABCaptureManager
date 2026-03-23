@@ -9,6 +9,18 @@
 import Foundation
 import AVFoundation
 import VideoToolbox
+import os.lock
+
+final class UnfairLockBox: @unchecked Sendable {
+    private var rawLock = os_unfair_lock_s()
+    
+    @inline(__always)
+    func withLock<T>(_ body: () throws -> T) rethrows -> T {
+        os_unfair_lock_lock(&rawLock)
+        defer { os_unfair_lock_unlock(&rawLock) }
+        return try body()
+    }
+}
 
 enum CaptureWriterError: Swift.Error, LocalizedError {
     case unsupportedMediaType(String)
@@ -50,10 +62,9 @@ enum CaptureWriterError: Swift.Error, LocalizedError {
 
 /// Thread safe backing store - works with deinit and nonisolated func.
 fileprivate final class CaptureWriterCache: @unchecked Sendable {
-    private let lock = NSLock()
+    private let lock = UnfairLockBox()
     private func withLock<T>(_ block: () -> T) -> T {
-        lock.lock(); defer { lock.unlock() }
-        return block()
+        lock.withLock(block)
     }
     
     private var isRecordingValue: Bool = false
