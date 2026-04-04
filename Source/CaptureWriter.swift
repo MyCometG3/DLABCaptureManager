@@ -381,7 +381,13 @@ actor CaptureWriter: NSObject {
         
         // Create AVAssetWriter for QuickTime Movie
         let createWriterStart = CFAbsoluteTimeGetCurrent()
-        avAssetWriter = try? AVAssetWriter.init(outputURL: fileURL, fileType: AVFileType.mov)
+        do {
+            avAssetWriter = try AVAssetWriter(outputURL: fileURL, fileType: AVFileType.mov)
+        } catch {
+            traceStartup("create-writer \(elapsedMS(from: createWriterStart))ms")
+            let reason = "AVAssetWriter initialization failed: \(error.localizedDescription)"
+            throw CaptureWriterError.assetWriterIsNotAvailable(reason)
+        }
         traceStartup("create-writer \(elapsedMS(from: createWriterStart))ms")
         
         if let avAssetWriter = avAssetWriter {

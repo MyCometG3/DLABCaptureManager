@@ -169,7 +169,7 @@ public class CaptureManager: NSObject, DLABInputCaptureDelegate {
     /// True while recording
     public private(set) var recording: Bool = false
     
-    /// Protects the writer append gate across callback tasks and state transitions.
+    /// Protects recording writer state across callback tasks and state transitions.
     private let appendGateLock = UnfairLockBox()
     private var appendGateOpenStorage: Bool = false
     private var appendGateOpen: Bool {
@@ -178,7 +178,18 @@ public class CaptureManager: NSObject, DLABInputCaptureDelegate {
     }
     
     /// Writer object for recording
-    private var writer: CaptureWriter? = nil
+    private var writerStorage: CaptureWriter? = nil
+    private var writer: CaptureWriter? {
+        get { appendGateLock.withLock { writerStorage } }
+        set { appendGateLock.withLock { writerStorage = newValue } }
+    }
+    
+    private func currentAppendWriter() -> CaptureWriter? {
+        appendGateLock.withLock {
+            guard appendGateOpenStorage else { return nil }
+            return writerStorage
+        }
+    }
     
     /// Keep writer instance alive and pre-warm encoder/writer path between recordings.
     private var writerPrepared: Bool = false
@@ -198,7 +209,7 @@ public class CaptureManager: NSObject, DLABInputCaptureDelegate {
     /// Duration in sec of recording
     public var duration :Float64 {
         get {
-            if let writer = writer {
+            if let writer = currentAppendWriter() {
                 return writer.cachedDuration
             } else {
                 return lastDuration
@@ -846,7 +857,7 @@ public class CaptureManager: NSObject, DLABInputCaptureDelegate {
     private func processCapturedAudioSampleAsync(_ info: UnsafeSampleBufferInfo) async {
         let sampleBuffer = info.sampleBuffer
         
-        if appendGateOpen, let writer = writer {
+        if let writer = currentAppendWriter() {
             let wrapper = UnsafeSampleBufferWrapper(sampleBuffer: sampleBuffer)
             do {
                 try await writer.appendSampleBuffer(wrapper: wrapper, mediaType: .audio)
@@ -871,7 +882,7 @@ public class CaptureManager: NSObject, DLABInputCaptureDelegate {
         let sampleBuffer = info.sampleBuffer
         let setting = info.setting
         
-        if appendGateOpen, let writer = writer {
+        if let writer = currentAppendWriter() {
             let wrapper = UnsafeSampleBufferWrapper(sampleBuffer: sampleBuffer)
             do {
                 try await writer.appendSampleBuffer(wrapper: wrapper, mediaType: .video)
@@ -893,7 +904,7 @@ public class CaptureManager: NSObject, DLABInputCaptureDelegate {
                 let timecodeSampleBuffer = setting.createTimecodeSample(in: timecodeFormatType,
                                                                         videoSample: sampleBuffer)
                 if let timecodeSampleBuffer = timecodeSampleBuffer {
-                    if appendGateOpen, let writer = writer {
+                    if let writer = currentAppendWriter() {
                         let wrapper = UnsafeSampleBufferWrapper(sampleBuffer: timecodeSampleBuffer)
                         do {
                             try await writer.appendSampleBuffer(wrapper: wrapper, mediaType: .timecode)
@@ -914,7 +925,7 @@ public class CaptureManager: NSObject, DLABInputCaptureDelegate {
             if let timecodeSource = timecodeSource, timecodeSource == .CoreAudio, let timecodeHelper = timecodeHelper {
                 let timecodeSampleBuffer = timecodeHelper.createTimeCodeSample(from: sampleBuffer)
                 if let timecodeSampleBuffer = timecodeSampleBuffer {
-                    if appendGateOpen, let writer = writer {
+                    if let writer = currentAppendWriter() {
                         let wrapper = UnsafeSampleBufferWrapper(sampleBuffer: timecodeSampleBuffer)
                         do {
                             try await writer.appendSampleBuffer(wrapper: wrapper, mediaType: .timecode)
