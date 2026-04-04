@@ -369,6 +369,7 @@ public class CaptureVideoPreview: NSView, CALayerDelegate {
                          "INFO: Update video sample property.")
             
             // Ensure latest SampleRect/AspectRatio applied
+            layer?.setNeedsLayout()
             needsDisplay = true
         }
         
