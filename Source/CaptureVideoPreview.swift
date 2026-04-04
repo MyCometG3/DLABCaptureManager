@@ -318,6 +318,7 @@ public class CaptureVideoPreview: NSView, CALayerDelegate {
             lastQueuedHostTime = 0
             
             //
+            sbHelper.resetSampleRect()
             sampleAspectRatio = nil
             sampleEncodedSize = nil
             sampleCleanSize = nil

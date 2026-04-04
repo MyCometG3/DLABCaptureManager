@@ -233,6 +233,14 @@ internal final class VideoSampleBufferHelper: @unchecked Sendable {
         return updateSampleRect(sbIn)
     }
     
+    /// Reset cached sampleRect properties.
+    public func resetSampleRect() {
+        sampleAspectRatio = nil
+        sampleEncodedSize = nil
+        sampleCleanSize = nil
+        sampleProductionSize = nil
+    }
+    
     /// Update sampleRect properties from sampleBuffer.
     /// - Parameter sampleBuffer: CMSampleBuffer to update
     /// - Returns: True if sampleRect properties are updated, false if not.
