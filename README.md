@@ -16,7 +16,7 @@ NOTE: This framework is under development.
 ###### 1. Start capture session using DLABCaptureManager
     import Cocoa
     import DLABridging
-    import DLABCapturemanager
+    import DLABCaptureManager
 
     var manager :DLABCaptureManager? = nil
     var flag32BGRA :Bool = false
