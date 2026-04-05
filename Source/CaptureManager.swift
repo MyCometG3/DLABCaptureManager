@@ -770,6 +770,10 @@ public class CaptureManager: NSObject, DLABInputCaptureDelegate {
         
         return config
     }
+
+    internal func testingWriterConfig(movieURL: URL?, prefix: String?) -> CaptureWriter.CaptureWriterConfig {
+        makeWriterConfig(movieURL: movieURL, prefix: prefix)
+    }
     
     private func prepTimecodeHelper() {
         if let timecodeSource = timecodeSource, timecodeSource == .CoreAudio {

@@ -102,6 +102,12 @@ fileprivate final class CaptureWriterCache: @unchecked Sendable {
 }
 
 actor CaptureWriter: NSObject {
+    typealias AssetWriterFactory = @Sendable (URL, AVFileType) throws -> AVAssetWriter
+
+    private static let defaultAssetWriterFactory: AssetWriterFactory = { url, fileType in
+        try AVAssetWriter(outputURL: url, fileType: fileType)
+    }
+
     /* ============================================ */
     // MARK: - readonly property
     /* ============================================ */
@@ -223,6 +229,7 @@ actor CaptureWriter: NSObject {
     private var openSessionStartedAt: CFAbsoluteTime = 0
     /// Guard to emit first video append timing only once per recording session.
     private var loggedFirstVideoAppend: Bool = false
+    private var assetWriterFactory: AssetWriterFactory = CaptureWriter.defaultAssetWriterFactory
     
     /// CaptureWriter cache w/ nonisolated func support
     nonisolated private let cache = CaptureWriterCache()
@@ -240,6 +247,10 @@ actor CaptureWriter: NSObject {
         super.init()
         
         // print("Writer.init")
+    }
+
+    internal func testingSetAssetWriterFactory(_ factory: AssetWriterFactory?) {
+        assetWriterFactory = factory ?? CaptureWriter.defaultAssetWriterFactory
     }
     
     deinit {
@@ -382,7 +393,7 @@ actor CaptureWriter: NSObject {
         // Create AVAssetWriter for QuickTime Movie
         let createWriterStart = CFAbsoluteTimeGetCurrent()
         do {
-            avAssetWriter = try AVAssetWriter(outputURL: fileURL, fileType: AVFileType.mov)
+            avAssetWriter = try assetWriterFactory(fileURL, AVFileType.mov)
         } catch {
             traceStartup("create-writer \(elapsedMS(from: createWriterStart))ms")
             let reason = "AVAssetWriter initialization failed: \(error.localizedDescription)"
