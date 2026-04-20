@@ -63,6 +63,14 @@ extension CaptureManager: @unchecked Sendable {
 }
 
 public class CaptureManager: NSObject, DLABInputCaptureDelegate {
+    private struct CaptureRuntimeState {
+        var running: Bool = false
+        var recording: Bool = false
+        var writerPrepared: Bool = false
+        var timecodeReady: Bool = false
+        var lastDuration: Float64 = 0.0
+    }
+
     /// Verbose mode (debugging purpose)
     public var verbose: Bool = false
     
@@ -70,8 +78,37 @@ public class CaptureManager: NSObject, DLABInputCaptureDelegate {
     // MARK: - properties - Capturing
     /* ============================================ */
     
+    private let stateLock = UnfairLockBox()
+    private var runtimeState = CaptureRuntimeState()
+
+    private func withRuntimeState<T>(_ body: (inout CaptureRuntimeState) -> T) -> T {
+        stateLock.withLock {
+            body(&runtimeState)
+        }
+    }
+
+    private func runtimeStateValue<T>(_ keyPath: KeyPath<CaptureRuntimeState, T>) -> T {
+        stateLock.withLock {
+            runtimeState[keyPath: keyPath]
+        }
+    }
+
+    private func setRunning(_ newValue: Bool) {
+        withRuntimeState { $0.running = newValue }
+    }
+
+    private func setRecording(_ newValue: Bool) {
+        withRuntimeState { $0.recording = newValue }
+    }
+
+    private func setTimecodeReady(_ newValue: Bool) {
+        withRuntimeState { $0.timecodeReady = newValue }
+    }
+
     /// True while capture is running
-    public private(set) var running: Bool = false
+    public var running: Bool {
+        runtimeStateValue(\.running)
+    }
     
     /// Capture device as DLABDevice object
     public var currentDevice: DLABDevice? = nil
@@ -167,7 +204,9 @@ public class CaptureManager: NSObject, DLABInputCaptureDelegate {
     /* ============================================ */
     
     /// True while recording
-    public private(set) var recording: Bool = false
+    public var recording: Bool {
+        runtimeStateValue(\.recording)
+    }
     
     /// Protects recording writer state across callback tasks and state transitions.
     private let appendGateLock = UnfairLockBox()
@@ -192,10 +231,16 @@ public class CaptureManager: NSObject, DLABInputCaptureDelegate {
     }
     
     /// Keep writer instance alive and pre-warm encoder/writer path between recordings.
-    private var writerPrepared: Bool = false
+    private var writerPrepared: Bool {
+        get { runtimeStateValue(\.writerPrepared) }
+        set { withRuntimeState { $0.writerPrepared = newValue } }
+    }
     
     /// Optional. Set preferred output URL.
     public var movieURL: URL? = nil
+
+    /// Optional callback for non-fatal `CaptureWriter` diagnostics during fallback cleanup.
+    public var captureWriterDiagnosticHandler: (@Sendable (CaptureWriterDiagnostic) -> Void)? = nil
     
     /// Optional. Auto-generated movie name prefix.
     public var prefix: String? = "DL-"
@@ -204,7 +249,10 @@ public class CaptureManager: NSObject, DLABInputCaptureDelegate {
     public var sampleTimescale :CMTimeScale = 0
     
     /// Duration in sec of last recording
-    private var lastDuration :Float64 = 0.0
+    private var lastDuration :Float64 {
+        get { runtimeStateValue(\.lastDuration) }
+        set { withRuntimeState { $0.lastDuration = newValue } }
+    }
     
     /// Duration in sec of recording
     public var duration :Float64 {
@@ -287,7 +335,9 @@ public class CaptureManager: NSObject, DLABInputCaptureDelegate {
     /* ============================================ */
     
     /// True if input provides timecode data
-    public private(set) var timecodeReady :Bool = false
+    public var timecodeReady :Bool {
+        runtimeStateValue(\.timecodeReady)
+    }
     
     /// Timecode helper object
     private var timecodeHelper :CaptureTimecodeHelper? = nil
@@ -343,7 +393,7 @@ public class CaptureManager: NSObject, DLABInputCaptureDelegate {
         if let device = currentDevice, running == false {
             if timecodeSource != nil {
                 // support for timecode
-                timecodeReady = false
+                setTimecodeReady(false)
                 prepTimecodeHelper()
             }
             
@@ -450,7 +500,7 @@ public class CaptureManager: NSObject, DLABInputCaptureDelegate {
                     // Start stream
                     device.inputDelegate = self
                     try device.startStreams()
-                    running = true
+                    setRunning(true)
                 }
                 
                 if running {
@@ -478,7 +528,7 @@ public class CaptureManager: NSObject, DLABInputCaptureDelegate {
             
             do {
                 // Stop stream
-                running = false
+                setRunning(false)
                 try device.stopStreams()
                 device.inputDelegate = nil
                 clearInputAncillaryPacketHandler(from: device)
@@ -511,7 +561,7 @@ public class CaptureManager: NSObject, DLABInputCaptureDelegate {
             
             do {
                 // support for timecode
-                timecodeReady = false
+                setTimecodeReady(false)
                 timecodeHelper = nil
             }
             
@@ -543,7 +593,7 @@ public class CaptureManager: NSObject, DLABInputCaptureDelegate {
                 writerPrepared = (writer != nil)
                 
                 if recording {
-                    recording = false
+                    setRecording(false)
                 }
                 
                 printVerbose("CaptureManager.\(#function) - Stop recording completed")
@@ -573,7 +623,7 @@ public class CaptureManager: NSObject, DLABInputCaptureDelegate {
                     
                     if await writer.isRecording {
                         appendGateOpen = true
-                        recording = true
+                        setRecording(true)
                         writerPrepared = true
                         // print("NOTICE: Recording started")
                         
@@ -765,6 +815,7 @@ public class CaptureManager: NSObject, DLABInputCaptureDelegate {
         
         config.useTimecode = timecodeReady
         config.traceStartupTiming = verbose
+        config.diagnosticHandler = captureWriterDiagnosticHandler
         config.sourceVideoFormatDescription = currentDevice?.inputVideoSetting?.videoFormatDescription
         config.sourceAudioFormatDescription = currentDevice?.inputAudioSetting?.audioFormatDescription
         
@@ -919,7 +970,7 @@ public class CaptureManager: NSObject, DLABInputCaptureDelegate {
                     
                     // source provides timecode
                     if timecodeReady == false {
-                        timecodeReady = true
+                        setTimecodeReady(true)
                         printVerbose("NOTICE: timecodeReady : \(timecodeSource)")
                     }
                 }
@@ -940,7 +991,7 @@ public class CaptureManager: NSObject, DLABInputCaptureDelegate {
                     
                     // source provides timecode
                     if timecodeReady == false {
-                        timecodeReady = true
+                        setTimecodeReady(true)
                         printVerbose("NOTICE: timecodeReady : core_audio_smpte_time")
                     }
                 }
