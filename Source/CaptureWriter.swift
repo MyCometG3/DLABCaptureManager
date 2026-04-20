@@ -25,6 +25,7 @@ final class UnfairLockBox: @unchecked Sendable {
 enum CaptureWriterError: Swift.Error, LocalizedError {
     case unsupportedMediaType(String)
     case assetWriterIsNotAvailable(String)
+    case finishWritingTimedOut(String)
     case invalidAudioOutputSettings
     case invalidVideoOutputSettings
     case invalidTimecodeOutputSettings
@@ -40,6 +41,8 @@ enum CaptureWriterError: Swift.Error, LocalizedError {
             return "Unsupported media type: \(reason)."
         case .assetWriterIsNotAvailable(let reason):
             return "Invalid AVAssetWriter: \(reason)."
+        case .finishWritingTimedOut(let reason):
+            return "Timed out while finalizing movie file: \(reason)."
         case .invalidAudioOutputSettings:
             return "Invalid audio output settings provided."
         case .invalidVideoOutputSettings:
@@ -60,8 +63,20 @@ enum CaptureWriterError: Swift.Error, LocalizedError {
     }
 }
 
+public enum CaptureWriterDiagnostic: Sendable, Equatable {
+    case deinitWhileRecording
+    case finishWritingTimedOut(timeoutSeconds: Double)
+}
+
 /// Thread safe backing store - works with deinit and nonisolated func.
 fileprivate final class CaptureWriterCache: @unchecked Sendable {
+    private final class RetainedAssetWriterBox: @unchecked Sendable {
+        let writer: AVAssetWriter
+        init(writer: AVAssetWriter) {
+            self.writer = writer
+        }
+    }
+
     private let lock = UnfairLockBox()
     private func withLock<T>(_ block: () -> T) -> T {
         lock.withLock(block)
@@ -99,10 +114,61 @@ fileprivate final class CaptureWriterCache: @unchecked Sendable {
         get { withLock { avAssetWriterInputTimecodeValue } }
         set { withLock { avAssetWriterInputTimecodeValue = newValue } }
     }
+
+    private var diagnosticHandlerValue: (@Sendable (CaptureWriterDiagnostic) -> Void)? = nil
+    var diagnosticHandler: (@Sendable (CaptureWriterDiagnostic) -> Void)? {
+        get { withLock { diagnosticHandlerValue } }
+        set { withLock { diagnosticHandlerValue = newValue } }
+    }
+
+    private var finishWritingTimeoutSecondsValue: TimeInterval = CaptureWriter.defaultFinishWritingTimeoutSeconds
+    var finishWritingTimeoutSeconds: TimeInterval {
+        get { withLock { finishWritingTimeoutSecondsValue } }
+        set { withLock { finishWritingTimeoutSecondsValue = newValue } }
+    }
+
+    private var retainedAssetWritersValue: [ObjectIdentifier: RetainedAssetWriterBox] = [:]
+    func retainAssetWriter(_ writer: AVAssetWriter) {
+        withLock { () -> Void in
+            retainedAssetWritersValue[ObjectIdentifier(writer)] = RetainedAssetWriterBox(writer: writer)
+        }
+    }
+    func releaseAssetWriter(forKey key: ObjectIdentifier) {
+        withLock { () -> Void in
+            retainedAssetWritersValue.removeValue(forKey: key)
+        }
+    }
+    func cancelWriting(forKey key: ObjectIdentifier) {
+        let writer = withLock {
+            retainedAssetWritersValue[key]?.writer
+        }
+        writer?.cancelWriting()
+    }
 }
 
+private final class FinishWritingResumeState: @unchecked Sendable {
+    let lock = UnfairLockBox()
+    var resumed = false
+}
+
+private final class DispatchWorkItemBox: @unchecked Sendable {
+    let workItem: DispatchWorkItem
+    init(workItem: DispatchWorkItem) {
+        self.workItem = workItem
+    }
+}
+
+/// Movie writer used by `CaptureManager` and other callers that need explicit
+/// start/stop control over `AVAssetWriter`.
+///
+/// Callers should await `closeSession()` before releasing the writer.
+/// Cleanup performed from `deinit` is a fallback path only, and it waits for
+/// `finishWriting` for a bounded amount of time before giving up.
 actor CaptureWriter: NSObject {
     typealias AssetWriterFactory = @Sendable (URL, AVFileType) throws -> AVAssetWriter
+    public typealias DiagnosticHandler = @Sendable (CaptureWriterDiagnostic) -> Void
+    public static let defaultFinishWritingTimeoutSeconds: TimeInterval = 5.0
+    private static let minimumFinishWritingTimeoutSeconds: TimeInterval = 0.001
 
     private static let defaultAssetWriterFactory: AssetWriterFactory = { url, fileType in
         try AVAssetWriter(outputURL: url, fileType: fileType)
@@ -193,6 +259,25 @@ actor CaptureWriter: NSObject {
     public var clapVOffset : Int = 0
     /// Enable startup phase timing logs for diagnostics.
     public var traceStartupTiming: Bool = false
+    /// Optional callback for non-fatal diagnostics that can occur during fallback cleanup.
+    public var diagnosticHandler: DiagnosticHandler? = nil {
+        didSet {
+            cache.diagnosticHandler = diagnosticHandler
+        }
+    }
+    /// Bounded wait used by `finishWriting` before giving up in normal close and fallback `deinit` cleanup paths.
+    private var finishWritingTimeoutSecondsStorage: TimeInterval = CaptureWriter.defaultFinishWritingTimeoutSeconds
+    public var finishWritingTimeoutSeconds: TimeInterval {
+        get {
+            finishWritingTimeoutSecondsStorage
+        }
+        set {
+            let sanitizedValue = newValue.isFinite ? newValue : CaptureWriter.defaultFinishWritingTimeoutSeconds
+            let clampedValue = max(CaptureWriter.minimumFinishWritingTimeoutSeconds, sanitizedValue)
+            finishWritingTimeoutSecondsStorage = clampedValue
+            cache.finishWritingTimeoutSeconds = clampedValue
+        }
+    }
     
     /* ============================================ */
     // MARK: - private variable
@@ -245,12 +330,31 @@ actor CaptureWriter: NSObject {
     
     override init() {
         super.init()
+        cache.finishWritingTimeoutSeconds = finishWritingTimeoutSecondsStorage
         
         // print("Writer.init")
     }
 
     internal func testingSetAssetWriterFactory(_ factory: AssetWriterFactory?) {
         assetWriterFactory = factory ?? CaptureWriter.defaultAssetWriterFactory
+    }
+
+    internal func testingSetDiagnosticHandler(_ handler: DiagnosticHandler?) {
+        diagnosticHandler = handler
+    }
+
+    nonisolated internal func testingEmitDeinitDiagnostics(didTimeout: Bool = false) {
+        cache.diagnosticHandler?(.deinitWhileRecording)
+        if didTimeout {
+            let timeoutSeconds = cache.finishWritingTimeoutSeconds
+            cache.diagnosticHandler?(.finishWritingTimedOut(timeoutSeconds: timeoutSeconds))
+        }
+    }
+
+    nonisolated internal func testingInvokeDeinitTimeoutPath() {
+        let timeoutSeconds = cache.finishWritingTimeoutSeconds
+        cache.diagnosticHandler?(.deinitWhileRecording)
+        cache.diagnosticHandler?(.finishWritingTimedOut(timeoutSeconds: timeoutSeconds))
     }
     
     deinit {
@@ -259,12 +363,22 @@ actor CaptureWriter: NSObject {
         deinitHelper()
     }
     
-    /// nonisolated deinit helper function - synchronously close the recording session.
+    /// Nonisolated deinit helper function.
+    ///
+    /// This fallback path exists to give `AVAssetWriter.finishWriting` one last
+    /// bounded chance to complete file finalization when the writer is released
+    /// while recording is still active.
     nonisolated private func deinitHelper() {
         if let avAssetWriter = cache.assetWriter, cache.isRecording == true {
+            let cache = self.cache
             let avAssetWriterInputVideo = cache.assetWriterInputVideo
             let avAssetWriterInputAudio = cache.assetWriterInputAudio
             let avAssetWriterInputTimecode = cache.assetWriterInputTimecode
+            let timeoutSeconds = cache.finishWritingTimeoutSeconds
+            let writerKey = ObjectIdentifier(avAssetWriter)
+
+            cache.diagnosticHandler?(.deinitWhileRecording)
+            cache.retainAssetWriter(avAssetWriter)
             
             avAssetWriterInputVideo?.markAsFinished()
             avAssetWriterInputAudio?.markAsFinished()
@@ -272,9 +386,15 @@ actor CaptureWriter: NSObject {
             
             let semaphore = DispatchSemaphore(value: 0)
             avAssetWriter.finishWriting {
+                cache.releaseAssetWriter(forKey: writerKey)
                 semaphore.signal()
             }
-            semaphore.wait()
+            let waitResult = semaphore.wait(timeout: .now() + timeoutSeconds)
+            if waitResult == .timedOut {
+                cache.diagnosticHandler?(.finishWritingTimedOut(timeoutSeconds: timeoutSeconds))
+                avAssetWriter.cancelWriting()
+                cache.releaseAssetWriter(forKey: writerKey)
+            }
         }
     }
     
@@ -446,14 +566,16 @@ actor CaptureWriter: NSObject {
             if duration > 0.0 {
                 avAssetWriter.endSession(atSourceTime: endTime)
             }
-            await withCheckedContinuation { continuation in
-                avAssetWriter.finishWriting {
-                    continuation.resume()
-                }
-            }
+            let timeoutSeconds = finishWritingTimeoutSeconds
+            let didFinish = await waitForFinishWriting(avAssetWriter, timeoutSeconds: timeoutSeconds)
             defer {
                 // unref AVAssetWriter
                 cleanUp()
+            }
+
+            if didFinish == false {
+                diagnosticHandler?(.finishWritingTimedOut(timeoutSeconds: timeoutSeconds))
+                throw CaptureWriterError.finishWritingTimedOut("AVAssetWriter.finishWriting did not complete within \(timeoutSeconds) seconds")
             }
             
             // Finalize TS variables and duration
@@ -473,6 +595,43 @@ actor CaptureWriter: NSObject {
         } else {
             let reason = "AVAssetWriter is not available."
             throw CaptureWriterError.assetWriterIsNotAvailable(reason)
+        }
+    }
+
+    private func waitForFinishWriting(_ avAssetWriter: AVAssetWriter, timeoutSeconds: TimeInterval) async -> Bool {
+        await withCheckedContinuation { continuation in
+            let state = FinishWritingResumeState()
+            let cache = self.cache
+            let writerKey = ObjectIdentifier(avAssetWriter)
+            cache.retainAssetWriter(avAssetWriter)
+
+            let settle: @Sendable (Bool, Bool) -> Void = { didFinish, shouldCancelWriting in
+                let shouldResume = state.lock.withLock {
+                    if state.resumed {
+                        return false
+                    }
+                    state.resumed = true
+                    return true
+                }
+                if shouldResume {
+                    if shouldCancelWriting {
+                        cache.cancelWriting(forKey: writerKey)
+                    }
+                    cache.releaseAssetWriter(forKey: writerKey)
+                    continuation.resume(returning: didFinish)
+                }
+            }
+
+            let timeoutWorkItem = DispatchWorkItem {
+                settle(false, true)
+            }
+            let timeoutWorkItemBox = DispatchWorkItemBox(workItem: timeoutWorkItem)
+            DispatchQueue.global().asyncAfter(deadline: .now() + timeoutSeconds, execute: timeoutWorkItem)
+
+            avAssetWriter.finishWriting {
+                timeoutWorkItemBox.workItem.cancel()
+                settle(true, false)
+            }
         }
     }
     
@@ -1103,6 +1262,8 @@ extension CaptureWriter {
         public var clapHOffset: Int = 0
         public var clapVOffset: Int = 0
         public var traceStartupTiming: Bool = false
+        public var diagnosticHandler: DiagnosticHandler? = nil
+        public var finishWritingTimeoutSeconds: TimeInterval = CaptureWriter.defaultFinishWritingTimeoutSeconds
         
         public init() {}
     }
@@ -1143,6 +1304,8 @@ extension CaptureWriter {
         config.clapHOffset = self.clapHOffset
         config.clapVOffset = self.clapVOffset
         config.traceStartupTiming = self.traceStartupTiming
+        config.diagnosticHandler = self.diagnosticHandler
+        config.finishWritingTimeoutSeconds = self.finishWritingTimeoutSeconds
         
         return config
     }
@@ -1177,5 +1340,7 @@ extension CaptureWriter {
         self.clapHOffset = config.clapHOffset
         self.clapVOffset = config.clapVOffset
         self.traceStartupTiming = config.traceStartupTiming
+        self.diagnosticHandler = config.diagnosticHandler
+        self.finishWritingTimeoutSeconds = config.finishWritingTimeoutSeconds
     }
 }
