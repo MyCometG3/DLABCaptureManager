@@ -77,6 +77,11 @@ extension CaptureManager {
         return info
     }
     
+    @discardableResult
+    public func normalizeRecordedMovieTimeRange(at movieURL: URL) throws -> Bool {
+        try RecordedMovieTimeRangeNormalizer.normalizeMovie(at: movieURL).didRewrite
+    }
+    
     /// Dictionary of AudioSettingInfo
     /// - Parameter setting: DLABAudioSetting
     /// - Returns: Dictionary

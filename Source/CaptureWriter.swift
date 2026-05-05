@@ -76,7 +76,7 @@ fileprivate final class CaptureWriterCache: @unchecked Sendable {
             self.writer = writer
         }
     }
-
+    
     private let lock = UnfairLockBox()
     private func withLock<T>(_ block: () -> T) -> T {
         lock.withLock(block)
@@ -114,19 +114,19 @@ fileprivate final class CaptureWriterCache: @unchecked Sendable {
         get { withLock { avAssetWriterInputTimecodeValue } }
         set { withLock { avAssetWriterInputTimecodeValue = newValue } }
     }
-
+    
     private var diagnosticHandlerValue: (@Sendable (CaptureWriterDiagnostic) -> Void)? = nil
     var diagnosticHandler: (@Sendable (CaptureWriterDiagnostic) -> Void)? {
         get { withLock { diagnosticHandlerValue } }
         set { withLock { diagnosticHandlerValue = newValue } }
     }
-
+    
     private var finishWritingTimeoutSecondsValue: TimeInterval = CaptureWriter.defaultFinishWritingTimeoutSeconds
     var finishWritingTimeoutSeconds: TimeInterval {
         get { withLock { finishWritingTimeoutSecondsValue } }
         set { withLock { finishWritingTimeoutSecondsValue = newValue } }
     }
-
+    
     private var retainedAssetWritersValue: [ObjectIdentifier: RetainedAssetWriterBox] = [:]
     func retainAssetWriter(_ writer: AVAssetWriter) {
         withLock { () -> Void in
@@ -169,11 +169,11 @@ actor CaptureWriter: NSObject {
     public typealias DiagnosticHandler = @Sendable (CaptureWriterDiagnostic) -> Void
     public static let defaultFinishWritingTimeoutSeconds: TimeInterval = 5.0
     private static let minimumFinishWritingTimeoutSeconds: TimeInterval = 0.001
-
+    
     private static let defaultAssetWriterFactory: AssetWriterFactory = { url, fileType in
         try AVAssetWriter(outputURL: url, fileType: fileType)
     }
-
+    
     /* ============================================ */
     // MARK: - readonly property
     /* ============================================ */
@@ -334,15 +334,15 @@ actor CaptureWriter: NSObject {
         
         // print("Writer.init")
     }
-
+    
     internal func testingSetAssetWriterFactory(_ factory: AssetWriterFactory?) {
         assetWriterFactory = factory ?? CaptureWriter.defaultAssetWriterFactory
     }
-
+    
     internal func testingSetDiagnosticHandler(_ handler: DiagnosticHandler?) {
         diagnosticHandler = handler
     }
-
+    
     nonisolated internal func testingEmitDeinitDiagnostics(didTimeout: Bool = false) {
         cache.diagnosticHandler?(.deinitWhileRecording)
         if didTimeout {
@@ -350,7 +350,7 @@ actor CaptureWriter: NSObject {
             cache.diagnosticHandler?(.finishWritingTimedOut(timeoutSeconds: timeoutSeconds))
         }
     }
-
+    
     nonisolated internal func testingInvokeDeinitTimeoutPath() {
         let timeoutSeconds = cache.finishWritingTimeoutSeconds
         cache.diagnosticHandler?(.deinitWhileRecording)
@@ -376,7 +376,7 @@ actor CaptureWriter: NSObject {
             let avAssetWriterInputTimecode = cache.assetWriterInputTimecode
             let timeoutSeconds = cache.finishWritingTimeoutSeconds
             let writerKey = ObjectIdentifier(avAssetWriter)
-
+            
             cache.diagnosticHandler?(.deinitWhileRecording)
             cache.retainAssetWriter(avAssetWriter)
             
@@ -462,6 +462,10 @@ actor CaptureWriter: NSObject {
             let reason = "No recording session is in progress."
             internalError = CaptureWriterError.assetWriterIsNotAvailable(reason)
         }
+    }
+    
+    public func resolvedMovieURL() -> URL? {
+        movieURL
     }
     
     /// Append SampleBuffer with UnsafeSampleBufferWrapper
@@ -572,7 +576,7 @@ actor CaptureWriter: NSObject {
                 // unref AVAssetWriter
                 cleanUp()
             }
-
+            
             if didFinish == false {
                 diagnosticHandler?(.finishWritingTimedOut(timeoutSeconds: timeoutSeconds))
                 throw CaptureWriterError.finishWritingTimedOut("AVAssetWriter.finishWriting did not complete within \(timeoutSeconds) seconds")
@@ -597,14 +601,14 @@ actor CaptureWriter: NSObject {
             throw CaptureWriterError.assetWriterIsNotAvailable(reason)
         }
     }
-
+    
     private func waitForFinishWriting(_ avAssetWriter: AVAssetWriter, timeoutSeconds: TimeInterval) async -> Bool {
         await withCheckedContinuation { continuation in
             let state = FinishWritingResumeState()
             let cache = self.cache
             let writerKey = ObjectIdentifier(avAssetWriter)
             cache.retainAssetWriter(avAssetWriter)
-
+            
             let settle: @Sendable (Bool, Bool) -> Void = { didFinish, shouldCancelWriting in
                 let shouldResume = state.lock.withLock {
                     if state.resumed {
@@ -621,13 +625,13 @@ actor CaptureWriter: NSObject {
                     continuation.resume(returning: didFinish)
                 }
             }
-
+            
             let timeoutWorkItem = DispatchWorkItem {
                 settle(false, true)
             }
             let timeoutWorkItemBox = DispatchWorkItemBox(workItem: timeoutWorkItem)
             DispatchQueue.global().asyncAfter(deadline: .now() + timeoutSeconds, execute: timeoutWorkItem)
-
+            
             avAssetWriter.finishWriting {
                 timeoutWorkItemBox.workItem.cancel()
                 settle(true, false)
@@ -1074,7 +1078,7 @@ actor CaptureWriter: NSObject {
                 //
                 audioOutputSettings[AVChannelLayoutKey] = aclData
             }
-
+            
             // print("Channel count AVAF:\(avafChannelCount ?? 0), ACL:\(aclChannelCount ?? 0)")
         }
         
@@ -1159,7 +1163,7 @@ actor CaptureWriter: NSObject {
                         mNumberChannelDescriptions: 0,
                         mChannelDescriptions: AudioChannelDescription()
                     )
-
+                    
                     let layoutData = withUnsafePointer(to: &outLayout) { layoutPtr in
                         return NSData(bytes: layoutPtr, length: MemoryLayout<AudioChannelLayout>.size)
                     }

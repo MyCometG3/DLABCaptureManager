@@ -53,55 +53,55 @@ internal enum AudioChannelLayoutOutputType {
 
 extension CaptureWriter {
     /*
-     NOTE:
-     This function remaps the channel order of the input LPCM Audio SampleBuffer.
-     The framework supposes the native HDMI Audio layout as MPEG_7_1_A (L R C LFE Ls Rs Lc Rc).
-     With Reverse34 enabled, Channel C,LFE order is swapped as LFE,C.
-     Followings shows how channel remapping works from HDMI layout into AAC Layout.
-     
-     ### 3ch Audio
-                     0 1 2 3 4 5 6 7
-     src:MPEG_3_0_A  L R C _ _ _ _ _
-     dst:AAC_3_0
-     dst:MPEG_3_0_B  C L R
-                     2 0 1
-     
-     ### 3ch Audio + Reverse34
-                     0 1 2 3 4 5 6 7
-     src:MPEG_3_0_A  L R _ C _ _ _ _
-     dst:AAC_3_0
-     dst:MPEG_3_0_B  C L R
-                     3 0 1
-     
-     ### 5.1ch Audio
-                     0 1 2 3   4  5  6 7
-     src:MPEG_5_1_A  L R C LFE Ls Rs _ _
-     dst:AAC_5_1
-     dst:MPEG_5_1_D  C L R Ls Rs LFE
-                     2 0 1 4  5  3
-     
-     ### 5.1ch Audio + Reverse34
-                     0 1 2   3 4  5  6 7
-     src:Reverse34   L R LFE C Ls Rs _ _
-     dst:AAC_5_1
-     dst:MPEG_5_1_D  C L R Ls Rs LFE
-                     3 0 1 4  5  2
-     
-     ### 7.1ch Audio
-                     0 1 2 3   4  5  6  7
-     src:MPEG_7_1_A  L R C LFE Ls Rs Lc Rc
-     dst:AAC_7_1
-     dst:MPEG_7_1_B  C Lc Rc L R Ls Rs Lfe
-                     2 6  7  0 1 4  5  3
-     
-     ### 7.1ch Audio + Reverse34
-                     0 1 2   3 4  5  6  7
-     src:Reverse34   L R LFE C Ls Rs Lc Rc
-     dst:AAC_7_1
-     dst:MPEG_7_1_B  C Lc Rc L R Ls Rs Lfe
-                     3 6  7  0 1 4  5  2
+     * NOTE:
+     * This function remaps the channel order of the input LPCM Audio SampleBuffer.
+     * The framework supposes the native HDMI Audio layout as MPEG_7_1_A (L R C LFE Ls Rs Lc Rc).
+     * With Reverse34 enabled, Channel C,LFE order is swapped as LFE,C.
+     * The following shows how channel remapping works from HDMI layout into AAC Layout.
+     *
+     * ### 3ch Audio
+     *                 0 1 2 3 4 5 6 7
+     * src:MPEG_3_0_A  L R C _ _ _ _ _
+     * dst:AAC_3_0
+     * dst:MPEG_3_0_B  C L R
+     *                 2 0 1
+     *
+     * ### 3ch Audio + Reverse34
+     *                 0 1 2 3 4 5 6 7
+     * src:MPEG_3_0_A  L R _ C _ _ _ _
+     * dst:AAC_3_0
+     * dst:MPEG_3_0_B  C L R
+     *                 3 0 1
+     *
+     * ### 5.1ch Audio
+     *                 0 1 2 3   4  5  6 7
+     * src:MPEG_5_1_A  L R C LFE Ls Rs _ _
+     * dst:AAC_5_1
+     * dst:MPEG_5_1_D  C L R Ls Rs LFE
+     *                 2 0 1 4  5  3
+     *
+     * ### 5.1ch Audio + Reverse34
+     *                 0 1 2   3 4  5  6 7
+     * src:Reverse34   L R LFE C Ls Rs _ _
+     * dst:AAC_5_1
+     * dst:MPEG_5_1_D  C L R Ls Rs LFE
+     *                 3 0 1 4  5  2
+     *
+     * ### 7.1ch Audio
+     *                 0 1 2 3   4  5  6  7
+     * src:MPEG_7_1_A  L R C LFE Ls Rs Lc Rc
+     * dst:AAC_7_1
+     * dst:MPEG_7_1_B  C Lc Rc L R Ls Rs Lfe
+     *                 2 6  7  0 1 4  5  3
+     *
+     * ### 7.1ch Audio + Reverse34
+     *                 0 1 2   3 4  5  6  7
+     * src:Reverse34   L R LFE C Ls Rs Lc Rc
+     * dst:AAC_7_1
+     * dst:MPEG_7_1_B  C Lc Rc L R Ls Rs Lfe
+     *                 3 6  7  0 1 4  5  2
      */
-
+    
     /// Check if the AudioChannelLayout has Reverse34 layout.
     /// - Parameters:
     ///  - layoutPtr: Pointer to the AudioChannelLayout structure.
@@ -154,7 +154,7 @@ extension CaptureWriter {
         let layout = layoutPtr.pointee
         let tag = layout.mChannelLayoutTag
         let numDescriptions = Int(layout.mNumberChannelDescriptions)
-
+        
         // Count valid channels based on mChannelBitmap
         if tag == kAudioChannelLayoutTag_UseChannelBitmap {
             let bitmap: UInt32 = layout.mChannelBitmap.rawValue
@@ -185,7 +185,7 @@ extension CaptureWriter {
     /* ============================================ */
     // MARK: - Remap LPCM Channel Order for AAC Encoding
     /* ============================================ */
-
+    
     /// Remap the channel order of an LPCM Audio SampleBuffer for AAC encoding (3ch, 5.1ch, 7.1ch).
     /// - Parameters:
     ///   - inSampleBuffer: The input CMSampleBuffer containing LPCM audio data.
@@ -580,7 +580,7 @@ extension CaptureWriter {
             .advanced(by: descOffset)
             .bindMemory(to: AudioChannelDescription.self, capacity: descCount)
     }
-
+    
     /// Get pointer to the channel descriptions array in the output AudioChannelLayout
     /// - Parameter layoutPtr: Pointer to the AudioChannelLayout structure
     /// - Returns: Pointer to the channel descriptions array, or nil if unable to access
