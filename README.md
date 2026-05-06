@@ -5,7 +5,7 @@ Simple AV Capture Swift API for DLABridging (Objective-C API).
 - __Requirement__: macOS 26.x, 15.x, 14.x, 13.x, 12.x, 11.x.
 - __Capture Device__: Blackmagic DeckLink devices/UltraStudio devices.
 - __Restriction__: Compressed/Synchronized/IP captures are not supported.
-- __Dependency__: DeckLinkAPI.framework from Blackmagic_Desktop_Video_Macintosh (11.4-11.7, 12.0-12.9, 14.0-14.2, **15.0-15.3.1**)
+- __Dependency__: DeckLinkAPI.framework from Blackmagic_Desktop_Video_Macintosh (11.4-11.7, 12.0-12.9, 14.0-14.2, 15.0-15.3.1, **16.0**)
 - __Framework__: DLABridging.framework
 - __Architecture__: Universal binary (x86_64 + arm64)
 
@@ -96,9 +96,9 @@ NOTE: This framework is under development.
     manager = nil
 
 #### Development environment
-- macOS 26.4 Tahoe
-- Xcode 26.4
-- Swift 6.3
+- macOS 26.4.1 Tahoe
+- Xcode 26.4.1
+- Swift 6.3.1
 
 #### License
 - The MIT License
