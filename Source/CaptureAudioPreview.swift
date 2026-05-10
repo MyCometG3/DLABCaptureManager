@@ -233,7 +233,7 @@ class CaptureAudioPreview: NSObject, @unchecked Sendable {
         let desc = description ?? "unknown description"
         let reason = failureReason ?? "unknown failureReason"
         let userInfo :[String:Any] = [NSLocalizedDescriptionKey:desc,
-                                      NSLocalizedFailureReasonErrorKey:reason]
+                               NSLocalizedFailureReasonErrorKey:reason]
         return NSError(domain: domain, code: code, userInfo: userInfo)
     }
     

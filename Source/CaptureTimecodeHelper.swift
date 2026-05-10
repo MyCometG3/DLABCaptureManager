@@ -56,7 +56,7 @@ class CaptureTimecodeHelper: NSObject {
         
         // Extract SMPTETime from video sample
         guard let smpteTime = extractCVSMPTETime(from: videoSampleBuffer)
-            else { return nil }
+        else { return nil }
         
         // Evaluate TimeCode Quanta
         var quanta: UInt32 = 30
@@ -79,7 +79,7 @@ class CaptureTimecodeHelper: NSObject {
         
         // Prepare Data Buffer for new SampleBuffer
         guard let dataBuffer = prepareTimeCodeDataBuffer(smpteTime, sizes, quanta, tcType)
-            else { return nil }
+        else { return nil }
         
         /* ============================================ */
         

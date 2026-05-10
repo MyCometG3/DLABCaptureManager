@@ -562,8 +562,8 @@ extension CaptureWriter {
             return MemoryLayout<AudioChannelLayout>.size
         }
         
-        return MemoryLayout<AudioChannelLayout>.size +
-               (channelDescriptionCount - 1) * MemoryLayout<AudioChannelDescription>.size
+        return (MemoryLayout<AudioChannelLayout>.size +
+                (channelDescriptionCount - 1) * MemoryLayout<AudioChannelDescription>.size)
     }
     
     /// Get pointer to the channel descriptions array in the input AudioChannelLayout.
