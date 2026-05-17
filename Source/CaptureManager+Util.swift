@@ -124,8 +124,8 @@ extension CaptureManager {
     public func deviceList() -> [DLABDevice]? {
         let browser = DLABBrowser()
         _ = browser.registerDevicesForInput()
-        let devciceList = browser.allDevices
-        return devciceList
+        let deviceList = browser.allDevices
+        return deviceList
     }
     
     /// Supported Input VideoSettings for DLABDevice
@@ -149,23 +149,21 @@ extension CaptureManager {
     /// - Returns: Dictionary
     public func deviceInfo(device :DLABDevice) -> [String:Any] {
         var info :[String:Any] = [:]
-        do {
-            info["modelName"] = device.modelName // NSString* -> String
-            info["displayName"] = device.displayName // NSString* -> String
-            info["persistentID"] = device.persistentID // int64_t -> Int64
-            info["deviceGroupID"] = device.deviceGroupID // int64_t -> Int64
-            info["topologicalID"] = device.topologicalID // int64_t -> Int64
-            info["numberOfSubDevices"] = device.numberOfSubDevices // int64_t -> Int64
-            info["subDeviceIndex"] = device.subDeviceIndex // int64_t -> Int64
-            info["profileID"] = device.profileID // int64_t -> Int64
-            info["duplex"] = device.duplex // int64_t -> Int64
-            info["supportFlag"] = device.supportFlag // uint32_t -> UInt32
-            info["supportCapture"] = device.supportCapture // BOOL
-            info["supportPlayback"] = device.supportPlayback // BOOL
-            info["supportKeying"] = device.supportKeying // BOOL
-            info["supportInputFormatDetection"] = device.supportInputFormatDetection // BOOL
-            info["supportHDRMetadata"] = device.supportHDRMetadata // BOOL
-        }
+        info["modelName"] = device.modelName // NSString* -> String
+        info["displayName"] = device.displayName // NSString* -> String
+        info["persistentID"] = device.persistentID // int64_t -> Int64
+        info["deviceGroupID"] = device.deviceGroupID // int64_t -> Int64
+        info["topologicalID"] = device.topologicalID // int64_t -> Int64
+        info["numberOfSubDevices"] = device.numberOfSubDevices // int64_t -> Int64
+        info["subDeviceIndex"] = device.subDeviceIndex // int64_t -> Int64
+        info["profileID"] = device.profileID // int64_t -> Int64
+        info["duplex"] = device.duplex // int64_t -> Int64
+        info["supportFlag"] = device.supportFlag // uint32_t -> UInt32
+        info["supportCapture"] = device.supportCapture // BOOL
+        info["supportPlayback"] = device.supportPlayback // BOOL
+        info["supportKeying"] = device.supportKeying // BOOL
+        info["supportInputFormatDetection"] = device.supportInputFormatDetection // BOOL
+        info["supportHDRMetadata"] = device.supportHDRMetadata // BOOL
         return info
     }
     
@@ -179,14 +177,12 @@ extension CaptureManager {
     /// - Returns: Dictionary
     public func audioSettingInfo(setting :DLABAudioSetting) -> [String:Any] {
         var info :[String:Any] = [:]
-        do {
-            info["sampleSize"] = setting.sampleSize // uint32_t -> UInt32
-            info["channelCount"] = setting.channelCount // uint32_t -> UInt32
-            info["sampleType"] = setting.sampleType // uint32_t -> UInt32
-            info["sampleRate"] = setting.sampleRate // uint32_t -> UInt32
-            
-            info["audioFormatDescription"] = setting.audioFormatDescription.debugDescription // String
-        }
+        info["sampleSize"] = setting.sampleSize // uint32_t -> UInt32
+        info["channelCount"] = setting.channelCount // uint32_t -> UInt32
+        info["sampleType"] = setting.sampleType // uint32_t -> UInt32
+        info["sampleRate"] = setting.sampleRate // uint32_t -> UInt32
+        
+        info["audioFormatDescription"] = setting.audioFormatDescription.debugDescription // String
         return info
     }
     
@@ -195,30 +191,28 @@ extension CaptureManager {
     /// - Returns: Dictionary
     public func videoSettingInfo(setting :DLABVideoSetting) -> [String:Any] {
         var info :[String:Any] = [:]
-        do {
-            info["name"] = setting.name // NSString* -> String
-            info["width"] = setting.width // long -> int64_t -> Int64
-            info["height"] = setting.height // long -> int64_t -> Int64
-            
-            info["duration"] = setting.duration // int64_t -> Int64
-            info["timeScale"] = setting.timeScale // int64_t -> Int64
-            info["displayMode"] = NSFileTypeForHFSTypeCode(setting.displayMode.rawValue) // Sting
-            info["fieldDominance"] = NSFileTypeForHFSTypeCode(setting.fieldDominance.rawValue) // String
-            info["displayModeFlag"] = setting.displayModeFlag.rawValue // uint32_t -> UInt32
-            info["isHD"] = setting.isHD // BOOL
-            info["useSERIAL"] = setting.useSERIAL // BOOL
-            info["useVITC"] = setting.useVITC // BOOL
-            info["useRP188"] = setting.useRP188 // BOOL
-            
-            info["pixelFormat"] = NSFileTypeForHFSTypeCode(setting.pixelFormat.rawValue) // uint32_t -> UInt32
-            info["inputFlag"] = setting.inputFlag.rawValue // uint32_t -> UInt32
-            info["outputFlag"] = setting.outputFlag.rawValue // uint32_t -> UInt32
-            info["rowBytes"] = setting.rowBytes // long -> int64_t -> Int64
-            info["videoFormatDescription"] = setting.videoFormatDescription.debugDescription // String
-            
-            info["cvPixelFormatType"] = setting.cvPixelFormatType; // UInt32
-            info["cvRowBytes"]  = setting.cvRowBytes; // size_t -> Int -> Int64
-        }
+        info["name"] = setting.name // NSString* -> String
+        info["width"] = setting.width // long -> int64_t -> Int64
+        info["height"] = setting.height // long -> int64_t -> Int64
+        
+        info["duration"] = setting.duration // int64_t -> Int64
+        info["timeScale"] = setting.timeScale // int64_t -> Int64
+        info["displayMode"] = NSFileTypeForHFSTypeCode(setting.displayMode.rawValue) // Sting
+        info["fieldDominance"] = NSFileTypeForHFSTypeCode(setting.fieldDominance.rawValue) // String
+        info["displayModeFlag"] = setting.displayModeFlag.rawValue // uint32_t -> UInt32
+        info["isHD"] = setting.isHD // BOOL
+        info["useSERIAL"] = setting.useSERIAL // BOOL
+        info["useVITC"] = setting.useVITC // BOOL
+        info["useRP188"] = setting.useRP188 // BOOL
+        
+        info["pixelFormat"] = NSFileTypeForHFSTypeCode(setting.pixelFormat.rawValue) // uint32_t -> UInt32
+        info["inputFlag"] = setting.inputFlag.rawValue // uint32_t -> UInt32
+        info["outputFlag"] = setting.outputFlag.rawValue // uint32_t -> UInt32
+        info["rowBytes"] = setting.rowBytes // long -> int64_t -> Int64
+        info["videoFormatDescription"] = setting.videoFormatDescription.debugDescription // String
+        
+        info["cvPixelFormatType"] = setting.cvPixelFormatType; // UInt32
+        info["cvRowBytes"]  = setting.cvRowBytes; // size_t -> Int -> Int64
         return info
     }
     

@@ -249,7 +249,7 @@ class CaptureTimecodeHelper: NSObject {
         
         return dataBuffer
     }
-
+    
     internal func testingPrepareTimeCodeDataBuffer(_ smpteTime: CVSMPTETime,
                                                    sizes: Int,
                                                    quanta: UInt32,

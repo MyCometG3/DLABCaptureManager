@@ -55,7 +55,8 @@ internal final class VideoSampleBufferHelper: @unchecked Sendable {
             CVPixelBufferPoolFlush(pool, .excessBuffers)
             pixelBufferPoolStorage = nil
         }
-        let poolAttr = [kCVPixelBufferPoolMinimumBufferCountKey: 4 as CFNumber] as CFDictionary
+        let poolAttr = [kCVPixelBufferPoolMinimumBufferCountKey: 4 as CFNumber,
+                          kCVPixelBufferPoolMaximumBufferAgeKey: 0.5 as CFNumber] as CFDictionary
         let err = CVPixelBufferPoolCreate(kCFAllocatorDefault, poolAttr, dict, &pixelBufferPoolStorage)
         guard let pool = pixelBufferPoolStorage else {
             print("ERROR: VideoSampleBufferHelper - Failed to create CVPixelBufferPool (err=\(err))")

@@ -104,7 +104,7 @@ private final class BoundedWorkQueue: @unchecked Sendable {
 
 private final class WeakParentViewBox: @unchecked Sendable {
     weak var view: NSView?
-
+    
     init(view: NSView?) {
         self.view = view
     }
@@ -113,11 +113,11 @@ private final class WeakParentViewBox: @unchecked Sendable {
 private struct AudioPreviewDisposeFailure: LocalizedError {
     let stopError: NSError
     let disposeError: NSError
-
+    
     var errorDescription: String? {
         "Audio preview teardown failed."
     }
-
+    
     var failureReason: String? {
         [
             "aqStop: \(stopError.domain)(\(stopError.code)): \(stopError.localizedFailureReason ?? stopError.localizedDescription)",
@@ -129,7 +129,7 @@ private struct AudioPreviewDisposeFailure: LocalizedError {
 private final class AudioPreviewState: @unchecked Sendable {
     let preview: CaptureAudioPreview
     let inFlight = DispatchGroup()
-
+    
     init(preview: CaptureAudioPreview) {
         self.preview = preview
     }
@@ -286,7 +286,7 @@ public class CaptureManager: NSObject, DLABInputCaptureDelegate {
         } catch let error as NSError {
             stopError = error
         }
-
+        
         let disposeError: NSError?
         do {
             try preview.aqDispose()
@@ -294,7 +294,7 @@ public class CaptureManager: NSObject, DLABInputCaptureDelegate {
         } catch let error as NSError {
             disposeError = error
         }
-
+        
         switch (stopError, disposeError) {
         case (nil, nil):
             return
@@ -306,7 +306,7 @@ public class CaptureManager: NSObject, DLABInputCaptureDelegate {
             throw AudioPreviewDisposeFailure(stopError: stopError, disposeError: disposeError)
         }
     }
-
+    
     private func takeAudioPreviewForDisposal() -> AudioPreviewState? {
         audioPreviewLock.withLock { () -> AudioPreviewState? in
             let state = audioPreviewState
@@ -314,7 +314,7 @@ public class CaptureManager: NSObject, DLABInputCaptureDelegate {
             return state
         }
     }
-
+    
     private func finishDisposingAudioPreview(
         _ state: AudioPreviewState,
         teardown: @escaping @Sendable (CaptureAudioPreview) throws -> Void
@@ -325,7 +325,7 @@ public class CaptureManager: NSObject, DLABInputCaptureDelegate {
             teardown: teardown
         )
     }
-
+    
     private static func finishDisposingAudioPreview(
         _ state: AudioPreviewState,
         teardownQueue: DispatchQueue,
@@ -342,21 +342,21 @@ public class CaptureManager: NSObject, DLABInputCaptureDelegate {
             }
         }
     }
-
+    
     private func disposeAudioPreview() async throws {
         guard let state = takeAudioPreviewForDisposal() else { return }
         try await finishDisposingAudioPreview(state, teardown: Self.teardownAudioPreview)
     }
-
+    
     internal func testingSetAudioPreview(_ preview: CaptureAudioPreview?) {
         setAudioPreview(preview)
     }
-
+    
     @discardableResult
     internal func testingWithAudioPreview<T>(_ body: (CaptureAudioPreview) throws -> T) rethrows -> T? {
         try withAudioPreview(body)
     }
-
+    
     internal func testingDisposeAudioPreview(
         didTakeAudioPreviewState: (@Sendable () -> Void)? = nil,
         teardown: @escaping @Sendable (CaptureAudioPreview) throws -> Void
@@ -1009,7 +1009,7 @@ public class CaptureManager: NSObject, DLABInputCaptureDelegate {
         Task.detached {
             // Avoid capturing self in the deinit task
             if verbose { print("CaptureManager.\(#function) - Task started") }
-
+            
             if let audioPreviewState {
                 do {
                     try await Self.finishDisposingAudioPreview(
@@ -1355,9 +1355,7 @@ public class CaptureManager: NSObject, DLABInputCaptureDelegate {
         
         if let videoPreview = videoPreview {
             let wrapper = UnsafeSampleBufferWrapper(sampleBuffer: sampleBuffer)
-            do {
-                await videoPreview.queueSampleBufferAsync(wrapper: wrapper)
-            }
+            await videoPreview.queueSampleBufferAsync(wrapper: wrapper)
         }
         
         if let setting = setting {

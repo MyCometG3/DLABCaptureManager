@@ -1,12 +1,11 @@
 //
 //  VideoStyle.swift
-//  DLABCaptureManager
+//  DLABCapture
 //
 //  Created by Takashi Mochizuki on 2017/09/18.
 //  Copyright © 2017-2026 MyCometG3. All rights reserved.
 //
 
-import Foundation
 import AVFoundation
 
 public enum VideoStyle : String, Sendable {
