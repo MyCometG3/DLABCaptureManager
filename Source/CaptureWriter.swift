@@ -527,31 +527,37 @@ actor CaptureWriter {
             // Apply movieTimeScale
             avAssetWriter.movieTimeScale = sampleTimescale
             
-            // Prepare AVAssetWriterInput(s)
-            let prepareInputStart = CFAbsoluteTimeGetCurrent()
-            try prepareInputMedia()
-            traceStartup("prepare-input-media \(elapsedMS(from: prepareInputStart))ms")
-            
-            // Register AVAssetWriterInput(s)
-            let registerInputStart = CFAbsoluteTimeGetCurrent()
-            try registerInputMedia()
-            traceStartup("register-input-media \(elapsedMS(from: registerInputStart))ms")
-            
-            // Start writing session
-            let startWritingStart = CFAbsoluteTimeGetCurrent()
-            let valid = avAssetWriter.startWriting()
-            traceStartup("start-writing \(elapsedMS(from: startWritingStart))ms")
-            if !valid {
-                if let error = avAssetWriter.error {
-                    let reason = error.localizedDescription
-                    throw CaptureWriterError.unexpectedErrorWhileOpeningSession(reason)
-                } else {
-                    let statusStr = self.descriptionForStatus(avAssetWriter.status)
-                    let reason = "AVAssetWriter did not start successfully. (\(statusStr))"
-                    throw CaptureWriterError.unexpectedErrorWhileOpeningSession(reason)
+            do {
+                // Prepare AVAssetWriterInput(s)
+                let prepareInputStart = CFAbsoluteTimeGetCurrent()
+                try prepareInputMedia()
+                traceStartup("prepare-input-media \(elapsedMS(from: prepareInputStart))ms")
+                
+                // Register AVAssetWriterInput(s)
+                let registerInputStart = CFAbsoluteTimeGetCurrent()
+                try registerInputMedia()
+                traceStartup("register-input-media \(elapsedMS(from: registerInputStart))ms")
+                
+                // Start writing session
+                let startWritingStart = CFAbsoluteTimeGetCurrent()
+                let valid = avAssetWriter.startWriting()
+                traceStartup("start-writing \(elapsedMS(from: startWritingStart))ms")
+                if !valid {
+                    if let error = avAssetWriter.error {
+                        let reason = error.localizedDescription
+                        throw CaptureWriterError.unexpectedErrorWhileOpeningSession(reason)
+                    } else {
+                        let statusStr = self.descriptionForStatus(avAssetWriter.status)
+                        let reason = "AVAssetWriter did not start successfully. (\(statusStr))"
+                        throw CaptureWriterError.unexpectedErrorWhileOpeningSession(reason)
+                    }
                 }
+                traceStartup("open-session-total \(elapsedMS(from: startAt))ms")
+            } catch {
+                avAssetWriter.cancelWriting()
+                self.avAssetWriter = nil
+                throw error
             }
-            traceStartup("open-session-total \(elapsedMS(from: startAt))ms")
         } else {
             let reason = "AVAssetWriter is not available."
             throw CaptureWriterError.assetWriterIsNotAvailable(reason)
