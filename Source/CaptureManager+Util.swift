@@ -100,7 +100,27 @@ extension CaptureManager {
         .mode4kDCI11988:     DisplayModeTiming(timescale: 120000, fps: 120.0/1.001),
         .mode4kDCI120:       DisplayModeTiming(timescale: 120000, fps: 120.0),
         
-        // TODO .mode8K...
+        .mode8K4320p2398:    DisplayModeTiming(timescale: 24000, fps: 24.0/1.001),
+        .mode8K4320p24:      DisplayModeTiming(timescale: 24000, fps: 24.0),
+        .mode8K4320p25:      DisplayModeTiming(timescale: 25000, fps: 25.0),
+        .mode8K4320p2997:    DisplayModeTiming(timescale: 30000, fps: 30.0/1.001),
+        .mode8K4320p30:      DisplayModeTiming(timescale: 30000, fps: 30.0),
+        .mode8K4320p4795:    DisplayModeTiming(timescale: 48000, fps: 48.0/1.001),
+        .mode8K4320p48:      DisplayModeTiming(timescale: 48000, fps: 48.0),
+        .mode8K4320p50:      DisplayModeTiming(timescale: 50000, fps: 50.0),
+        .mode8K4320p5994:    DisplayModeTiming(timescale: 60000, fps: 60.0/1.001),
+        .mode8K4320p60:      DisplayModeTiming(timescale: 60000, fps: 60.0),
+        
+        .mode8kDCI2398:      DisplayModeTiming(timescale: 24000, fps: 24.0/1.001),
+        .mode8kDCI24:        DisplayModeTiming(timescale: 24000, fps: 24.0),
+        .mode8kDCI25:        DisplayModeTiming(timescale: 25000, fps: 25.0),
+        .mode8kDCI2997:      DisplayModeTiming(timescale: 30000, fps: 30.0/1.001),
+        .mode8kDCI30:        DisplayModeTiming(timescale: 30000, fps: 30.0),
+        .mode8kDCI4795:      DisplayModeTiming(timescale: 48000, fps: 48.0/1.001),
+        .mode8kDCI48:        DisplayModeTiming(timescale: 48000, fps: 48.0),
+        .mode8kDCI50:        DisplayModeTiming(timescale: 50000, fps: 50.0),
+        .mode8kDCI5994:      DisplayModeTiming(timescale: 60000, fps: 60.0/1.001),
+        .mode8kDCI60:        DisplayModeTiming(timescale: 60000, fps: 60.0),
     ]
     
     /* ============================================ */
@@ -259,7 +279,12 @@ extension CaptureManager {
             .mode4kDCI2398, .mode4kDCI24, .mode4kDCI25, .mode4kDCI2997, .mode4kDCI30,
             .mode4kDCI4795, .mode4kDCI48, .mode4kDCI50, .mode4kDCI5994, .mode4kDCI60,
             .mode4kDCI9590, .mode4kDCI96, .mode4kDCI100, .mode4kDCI11988, .mode4kDCI120,
-            // TODO .mode8K...
+            // 8K UHD Modes
+            .mode8K4320p2398, .mode8K4320p24, .mode8K4320p25, .mode8K4320p2997, .mode8K4320p30,
+            .mode8K4320p4795, .mode8K4320p48, .mode8K4320p50, .mode8K4320p5994, .mode8K4320p60,
+            // 8K DCI Modes
+            .mode8kDCI2398, .mode8kDCI24, .mode8kDCI25, .mode8kDCI2997, .mode8kDCI30,
+            .mode8kDCI4795, .mode8kDCI48, .mode8kDCI50, .mode8kDCI5994, .mode8kDCI60,
         ]
         return list
     }
