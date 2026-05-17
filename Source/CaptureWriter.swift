@@ -1,6 +1,6 @@
 //
 //  CaptureWriter.swift
-//  DLABCaptureManager
+//  DLABCapture
 //
 //  Created by Takashi Mochizuki on 2017/09/16.
 //  Copyright © 2017-2026 MyCometG3. All rights reserved.
@@ -169,6 +169,7 @@ actor CaptureWriter: NSObject {
     public typealias DiagnosticHandler = @Sendable (CaptureWriterDiagnostic) -> Void
     public static let defaultFinishWritingTimeoutSeconds: TimeInterval = 5.0
     private static let minimumFinishWritingTimeoutSeconds: TimeInterval = 0.001
+    public static let defaultEncodeAudioBitrate: UInt = 256 * 1000
     
     private static let defaultAssetWriterFactory: AssetWriterFactory = { url, fileType in
         try AVAssetWriter(outputURL: url, fileType: fileType)
@@ -240,7 +241,7 @@ actor CaptureWriter: NSObject {
     /// Set AudioCodec ID as kAudioFormatXXX.
     public var encodeAudioFormatID : AudioFormatID = kAudioFormatMPEG4AAC
     /// Set Audio target bitrate. default is 256 * 1000 bps.
-    public var encodeAudioBitrate : UInt = 256 * 1000
+    public var encodeAudioBitrate : UInt = CaptureWriter.defaultEncodeAudioBitrate
     /// Set YES to encode video.
     public var encodeVideo : Bool = true
     /// Set YES to use ProRes422 for video. No to use other codec like Apple H.264.
@@ -1256,7 +1257,7 @@ extension CaptureWriter {
         // output encoding setting
         public var encodeAudio: Bool = false
         public var encodeAudioFormatID: AudioFormatID = kAudioFormatMPEG4AAC
-        public var encodeAudioBitrate: UInt = 256 * 1024
+        public var encodeAudioBitrate: UInt = CaptureWriter.defaultEncodeAudioBitrate
         public var encodeVideo: Bool = true
         public var encodeProRes422: Bool = true
         public var encodeVideoCodecType: CMVideoCodecType? = kCMVideoCodecType_H264

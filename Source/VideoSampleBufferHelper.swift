@@ -1,6 +1,6 @@
 //
 //  VideoSampleBufferHelper.swift
-//  DLABCaptureManager
+//  DLABCapture
 //
 //  Created by Takashi Mochizuki on 2025/07/06.
 //  Copyright © 2026 MyCometG3. All rights reserved.
@@ -47,7 +47,7 @@ internal final class VideoSampleBufferHelper: @unchecked Sendable {
         return typeOK && widthOK && heightOK && strideOK
     }
     
-    private func getOrCreatePixelBufferPoolLocked(with dict: CFDictionary) -> CVPixelBufferPool {
+    private func getOrCreatePixelBufferPoolLocked(with dict: CFDictionary) -> CVPixelBufferPool? {
         if let pool = pixelBufferPoolStorage {
             if matchesPixelBufferPool(pool, with: dict) {
                 return pool
@@ -57,11 +57,14 @@ internal final class VideoSampleBufferHelper: @unchecked Sendable {
         }
         let poolAttr = [kCVPixelBufferPoolMinimumBufferCountKey: 4 as CFNumber] as CFDictionary
         let err = CVPixelBufferPoolCreate(kCFAllocatorDefault, poolAttr, dict, &pixelBufferPoolStorage)
-        precondition(err == kCVReturnSuccess, "ERROR: Failed to create CVPixelBufferPool")
-        return pixelBufferPoolStorage!
+        guard let pool = pixelBufferPoolStorage else {
+            print("ERROR: VideoSampleBufferHelper - Failed to create CVPixelBufferPool (err=\(err))")
+            return nil
+        }
+        return pool
     }
     
-    private func getOrCreatePixelBufferPool(with dict: CFDictionary) -> CVPixelBufferPool {
+    private func getOrCreatePixelBufferPool(with dict: CFDictionary) -> CVPixelBufferPool? {
         poolLock.withLock {
             getOrCreatePixelBufferPoolLocked(with: dict)
         }
@@ -75,7 +78,9 @@ internal final class VideoSampleBufferHelper: @unchecked Sendable {
     
     private func takePixelBuffer(matching dict: CFDictionary) -> CVPixelBuffer? {
         poolLock.withLock {
-            let pool = getOrCreatePixelBufferPoolLocked(with: dict)
+            guard let pool = getOrCreatePixelBufferPoolLocked(with: dict) else {
+                return nil
+            }
             return takePixelBuffer(from: pool)
         }
     }
@@ -222,14 +227,19 @@ internal final class VideoSampleBufferHelper: @unchecked Sendable {
     /// - Parameter sampleBuffer: CMSampleBuffer
     /// @discussion: This will force sampleBuffer to be displayed immediately.
     public func refreshImage(_ sampleBuffer: CMSampleBuffer) {
-        if let attachments :CFArray = CMSampleBufferGetSampleAttachmentsArray(sampleBuffer, createIfNecessary: true) {
-            let ptr :UnsafeRawPointer = CFArrayGetValueAtIndex(attachments, 0)
-            let dict = fromOpaque(ptr, CFMutableDictionary.self)
-            let key = toOpaque(kCMSampleAttachmentKey_DisplayImmediately)
-            let value = toOpaque(kCFBooleanTrue)
-            CFDictionarySetValue(dict, key, value)
+        guard let attachments = CMSampleBufferGetSampleAttachmentsArray(sampleBuffer, createIfNecessary: true) else {
+            print("ERROR: VideoSampleBufferHelper.refreshImage - attachments is nil")
+            return
         }
-        else { preconditionFailure("attachments is nil") }
+        guard CFArrayGetCount(attachments) > 0 else {
+            print("ERROR: VideoSampleBufferHelper.refreshImage - attachments is empty")
+            return
+        }
+        let ptr :UnsafeRawPointer = CFArrayGetValueAtIndex(attachments, 0)
+        let dict = fromOpaque(ptr, CFMutableDictionary.self)
+        let key = toOpaque(kCMSampleAttachmentKey_DisplayImmediately)
+        let value = toOpaque(kCFBooleanTrue)
+        CFDictionarySetValue(dict, key, value)
     }
     
     /// Mark sampleBuffer as DoNotDisplay
@@ -237,14 +247,19 @@ internal final class VideoSampleBufferHelper: @unchecked Sendable {
     /// - Parameter sampleBuffer: CMSampleBuffer
     /// @discussion: This will prevent sampleBuffer from being displayed.
     public func donotDisplayImage(_ sampleBuffer: CMSampleBuffer) {
-        if let attachments :CFArray = CMSampleBufferGetSampleAttachmentsArray(sampleBuffer, createIfNecessary: true) {
-            let ptr :UnsafeRawPointer = CFArrayGetValueAtIndex(attachments, 0)
-            let dict = fromOpaque(ptr, CFMutableDictionary.self)
-            let key = toOpaque(kCMSampleAttachmentKey_DoNotDisplay)
-            let value = toOpaque(kCFBooleanFalse)
-            CFDictionarySetValue(dict, key, value)
+        guard let attachments = CMSampleBufferGetSampleAttachmentsArray(sampleBuffer, createIfNecessary: true) else {
+            print("ERROR: VideoSampleBufferHelper.donotDisplayImage - attachments is nil")
+            return
         }
-        else { preconditionFailure("attachments is nil") }
+        guard CFArrayGetCount(attachments) > 0 else {
+            print("ERROR: VideoSampleBufferHelper.donotDisplayImage - attachments is empty")
+            return
+        }
+        let ptr :UnsafeRawPointer = CFArrayGetValueAtIndex(attachments, 0)
+        let dict = fromOpaque(ptr, CFMutableDictionary.self)
+        let key = toOpaque(kCMSampleAttachmentKey_DoNotDisplay)
+        let value = toOpaque(kCFBooleanTrue)
+        CFDictionarySetValue(dict, key, value)
     }
     
     /* ================================================ */

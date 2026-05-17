@@ -1,6 +1,6 @@
 //
 //  CaptureVideoPreview.swift
-//  DLABCaptureManager
+//  DLABCapture
 //
 //  Created by Takashi Mochizuki on 2017/10/31.
 //  Copyright © 2017-2026 MyCometG3. All rights reserved.
@@ -656,9 +656,14 @@ public class CaptureVideoPreview: NSView, CALayerDelegate {
                     return kCVReturnError
                 }
                 
-                let refreshInterval = videoRefreshIntervalFromTimeStamp(inNowTS.pointee)! // refresh interval in seconds
-                let lastVSync = videoTimeIntervalFromTimeStamp(inNowTS.pointee)! // last vsync (current frame)
-                let targetTimestamp = videoTimeIntervalFromTimeStamp(inOutTS.pointee)! // deadline for next frame
+                guard
+                    let refreshInterval = videoRefreshIntervalFromTimeStamp(inNowTS.pointee),
+                    let lastVSync = videoTimeIntervalFromTimeStamp(inNowTS.pointee),
+                    let targetTimestamp = videoTimeIntervalFromTimeStamp(inOutTS.pointee)
+                else {
+                    return kCVReturnError
+                }
+                
                 let nextVSync = lastVSync + refreshInterval // next vsync (next frame)
                 let expiredTimestamp = nextVSync + refreshInterval // next frame expired
                 

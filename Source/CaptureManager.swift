@@ -1,6 +1,6 @@
 //
 //  CaptureManager.swift
-//  DLABCaptureManager
+//  DLABCapture
 //
 //  Created by Takashi Mochizuki on 2017/10/09.
 //  Copyright © 2017-2026 MyCometG3. All rights reserved.
@@ -134,6 +134,8 @@ public class CaptureManager: NSObject, DLABInputCaptureDelegate {
         var timecodeReady: Bool = false
         var lastDuration: Float64 = 0.0
         var lastRecordedMoviePostProcessError: Error? = nil
+        var stopError: (any Error)? = nil
+        var audioPreviewError: (any Error)? = nil
         var currentDevice: DLABDevice? = nil
         var audioCaptureEnabled: Bool = false
         var videoCaptureEnabled: Bool = false
@@ -344,6 +346,26 @@ public class CaptureManager: NSObject, DLABInputCaptureDelegate {
         set { withRuntimeState { $0.lastRecordedMoviePostProcessError = newValue } }
     }
     
+    /// Error from the last `captureStopAsync()` call, if stop failed.
+    /// Cleared on successful stop.
+    public private(set) var stopError: (any Error)? {
+        get { runtimeStateValue(\.stopError) }
+        set { withRuntimeState { $0.stopError = newValue } }
+    }
+    
+    /// Last audio preview failure (enqueue/aqPrime/aqStart), if any.
+    /// Overwritten on each new failure; not cleared automatically.
+    /// Use ``clearAudioPreviewError()`` to reset after handling.
+    public private(set) var audioPreviewError: (any Error)? {
+        get { runtimeStateValue(\.audioPreviewError) }
+        set { withRuntimeState { $0.audioPreviewError = newValue } }
+    }
+    
+    /// Clear the last audio preview error.
+    public func clearAudioPreviewError() {
+        withRuntimeState { $0.audioPreviewError = nil }
+    }
+    
     /// Optional callback for non-fatal `CaptureWriter` diagnostics during fallback cleanup.
     public var captureWriterDiagnosticHandler: (@Sendable (CaptureWriterDiagnostic) -> Void)? = nil
     
@@ -382,7 +404,7 @@ public class CaptureManager: NSObject, DLABInputCaptureDelegate {
     
     /// Set encoded audio target bitrate. Default is 256 * 1000 bps.
     /// Recommends AAC-LC:64k~/ch, HE-AAC:24k~/ch, HE-AACv2: 12k~/ch.
-    public var encodeAudioBitrate :UInt = 256_000
+    public var encodeAudioBitrate :UInt = CaptureWriter.defaultEncodeAudioBitrate
     
     /// Optional: customise audio encode settings of AVAssetWriterInput.
     public var updateAudioSettings : (@Sendable ([String:Any]) -> [String:Any])? = nil
@@ -676,19 +698,19 @@ public class CaptureManager: NSObject, DLABInputCaptureDelegate {
             
             do {
                 // Stop stream
-                running = false
                 try device.stopStreams()
+                running = false
                 device.inputDelegate = nil
                 clearInputAncillaryPacketHandler(from: device)
                 
                 // Disable Capture
                 if videoCaptureEnabled {
-                    videoCaptureEnabled = false
                     try device.disableVideoInput()
+                    videoCaptureEnabled = false
                 }
                 if audioCaptureEnabled {
-                    audioCaptureEnabled = false
                     try device.disableAudioInput()
+                    audioCaptureEnabled = false
                 }
                 
                 // Disable Preview
@@ -702,22 +724,21 @@ public class CaptureManager: NSObject, DLABInputCaptureDelegate {
                     try preview.aqStop()
                     try preview.aqDispose()
                 }
-            } catch let error as NSError {
-                printVerbose("ERROR:CaptureManager.\(#function) - \(error.domain)(\(error.code)): \(error.localizedFailureReason ?? "unknown reason")")
-            }
-            
-            do {
+                
                 // support for timecode
                 timecodeReady = false
                 clearTimecodeHelper()
-            }
-            
-            if !running {
+                
+                stopError = nil
                 printVerbose("CaptureManager.\(#function) - Stop capture session completed")
                 return true
+            } catch let error as NSError {
+                printVerbose("ERROR:CaptureManager.\(#function) - \(error.domain)(\(error.code)): \(error.localizedFailureReason ?? "unknown reason")")
+                stopError = error
             }
         } else {
             printVerbose("ERROR:CaptureManager.\(#function) - device is not ready")
+            stopError = createError(-2, "Device is not ready", "No device available or already stopped")
         }
         
         return false
@@ -846,6 +867,7 @@ public class CaptureManager: NSObject, DLABInputCaptureDelegate {
     
     /// deinit helper method for cleanup.
     private func detachedCleanup() {
+        let isRunning = self.running
         appendGateOpen = false
         running = false
         _ = audioQueue.takeAll()
@@ -862,7 +884,6 @@ public class CaptureManager: NSObject, DLABInputCaptureDelegate {
         let videoPreview = self.videoPreview
         let parentView = self.parentView
         let audioPreview = takeAudioPreview()
-        let isRunning = self.running
         let isRecording = self.recording
         let isVideoCaptureEnabled = self.videoCaptureEnabled
         let isAudioCaptureEnabled = self.audioCaptureEnabled
@@ -876,27 +897,45 @@ public class CaptureManager: NSObject, DLABInputCaptureDelegate {
                 await writer.closeSession() // actor isolated (writer)
             }
             if isRunning, let device = device {
-                try? device.stopStreams()
+                do { try device.stopStreams() }
+                catch {
+                    if verbose { print("ERROR:CaptureManager.detachedCleanup - stopStreams failed: \(error.localizedDescription)") }
+                }
                 device.inputDelegate = nil
                 device.inputAncillaryPacketHandler = nil
                 
                 if isVideoCaptureEnabled {
-                    try? device.disableVideoInput()
+                    do { try device.disableVideoInput() }
+                    catch {
+                        if verbose { print("ERROR:CaptureManager.detachedCleanup - disableVideoInput failed: \(error.localizedDescription)") }
+                    }
                 }
                 if isAudioCaptureEnabled {
-                    try? device.disableAudioInput()
+                    do { try device.disableAudioInput() }
+                    catch {
+                        if verbose { print("ERROR:CaptureManager.detachedCleanup - disableAudioInput failed: \(error.localizedDescription)") }
+                    }
                 }
                 if let videoPreview = videoPreview {
                     await videoPreview.shutdown() // @MainActor
                 }
                 if parentView != nil {
-                    DispatchQueue.main.async {
-                        try? device.setInputScreenPreviewTo(nil) // DLABDevice/captureQueue
+                    DispatchQueue.main.async { [device] in
+                        do { try device.setInputScreenPreviewTo(nil) }
+                        catch {
+                            if verbose { print("ERROR:CaptureManager.detachedCleanup - setInputScreenPreviewTo failed: \(error.localizedDescription)") }
+                        }
                     }
                 }
                 if let audioPreview = audioPreview {
-                    try? audioPreview.aqStop()
-                    try? audioPreview.aqDispose()
+                    do { try audioPreview.aqStop() }
+                    catch {
+                        if verbose { print("ERROR:CaptureManager.detachedCleanup - aqStop failed: \(error.localizedDescription)") }
+                    }
+                    do { try audioPreview.aqDispose() }
+                    catch {
+                        if verbose { print("ERROR:CaptureManager.detachedCleanup - aqDispose failed: \(error.localizedDescription)") }
+                    }
                 }
             }
             
@@ -1140,11 +1179,29 @@ public class CaptureManager: NSObject, DLABInputCaptureDelegate {
         }
         if let preview = currentAudioPreview() {
             if preview.running == true {
-                try? preview.enqueue(sampleBuffer)
+                do { try preview.enqueue(sampleBuffer) }
+                catch {
+                    audioPreviewError = error
+                    printVerbose("ERROR:CaptureManager.\(#function) - audio preview enqueue failed: \(error.localizedDescription)")
+                }
             } else {
-                try? preview.enqueue(sampleBuffer)
-                try? preview.aqPrime()
-                try? preview.aqStart()
+                do { try preview.enqueue(sampleBuffer) }
+                catch {
+                    audioPreviewError = error
+                    printVerbose("ERROR:CaptureManager.\(#function) - audio preview enqueue failed: \(error.localizedDescription)")
+                    return
+                }
+                do { try preview.aqPrime() }
+                catch {
+                    audioPreviewError = error
+                    printVerbose("ERROR:CaptureManager.\(#function) - audio preview aqPrime failed: \(error.localizedDescription)")
+                    return
+                }
+                do { try preview.aqStart() }
+                catch {
+                    audioPreviewError = error
+                    printVerbose("ERROR:CaptureManager.\(#function) - audio preview aqStart failed: \(error.localizedDescription)")
+                }
             }
         }
     }
