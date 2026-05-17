@@ -110,6 +110,31 @@ private final class WeakParentViewBox: @unchecked Sendable {
     }
 }
 
+private struct AudioPreviewDisposeFailure: LocalizedError {
+    let stopError: NSError
+    let disposeError: NSError
+
+    var errorDescription: String? {
+        "Audio preview teardown failed."
+    }
+
+    var failureReason: String? {
+        [
+            "aqStop: \(stopError.domain)(\(stopError.code)): \(stopError.localizedFailureReason ?? stopError.localizedDescription)",
+            "aqDispose: \(disposeError.domain)(\(disposeError.code)): \(disposeError.localizedFailureReason ?? disposeError.localizedDescription)"
+        ].joined(separator: " | ")
+    }
+}
+
+private final class AudioPreviewState: @unchecked Sendable {
+    let preview: CaptureAudioPreview
+    let inFlight = DispatchGroup()
+
+    init(preview: CaptureAudioPreview) {
+        self.preview = preview
+    }
+}
+
 /// Extension to make CaptureManager conform to Sendable for cross-actor usage.
 ///
 /// Concurrency model — mutable state falls into these categories:
@@ -213,7 +238,7 @@ public class CaptureManager: NSObject, DLABInputCaptureDelegate {
     public var volume: Float = 1.0 {
         didSet {
             volume = max(0.0, min(1.0, volume))
-            if let preview = currentAudioPreview() {
+            withAudioPreview { preview in
                 preview.volume = Float32(volume)
             }
         }
@@ -232,30 +257,113 @@ public class CaptureManager: NSObject, DLABInputCaptureDelegate {
     }
     /// AudioPreview object
     private let audioPreviewLock = UnfairLockBox()
-    private var audioPreviewStorage: CaptureAudioPreview? = nil
-    private var previewDisposed: Bool = false
+    private var audioPreviewState: AudioPreviewState? = nil
+    private let audioPreviewTeardownQueue = DispatchQueue(label: "captureManager.audioPreviewTeardown")
     
-    private func currentAudioPreview() -> CaptureAudioPreview? {
-        audioPreviewLock.withLock {
-            previewDisposed ? nil : audioPreviewStorage
+    @discardableResult
+    private func withAudioPreview<T>(_ body: (CaptureAudioPreview) throws -> T) rethrows -> T? {
+        let state: AudioPreviewState? = audioPreviewLock.withLock {
+            guard let state = audioPreviewState else { return nil }
+            state.inFlight.enter()
+            return state
         }
+        guard let state else { return nil }
+        defer { state.inFlight.leave() }
+        return try body(state.preview)
     }
     
     private func setAudioPreview(_ preview: CaptureAudioPreview?) {
         audioPreviewLock.withLock {
-            audioPreviewStorage = preview
-            previewDisposed = false
+            audioPreviewState = preview.map(AudioPreviewState.init)
         }
     }
     
-    private func takeAudioPreview() -> CaptureAudioPreview? {
-        audioPreviewLock.withLock {
-            guard !previewDisposed else { return nil }
-            let preview = audioPreviewStorage
-            audioPreviewStorage = nil
-            previewDisposed = true
-            return preview
+    private static func teardownAudioPreview(_ preview: CaptureAudioPreview) throws {
+        let stopError: NSError?
+        do {
+            try preview.aqStop()
+            stopError = nil
+        } catch let error as NSError {
+            stopError = error
         }
+
+        let disposeError: NSError?
+        do {
+            try preview.aqDispose()
+            disposeError = nil
+        } catch let error as NSError {
+            disposeError = error
+        }
+
+        switch (stopError, disposeError) {
+        case (nil, nil):
+            return
+        case let (stopError?, nil):
+            throw stopError
+        case let (nil, disposeError?):
+            throw disposeError
+        case let (stopError?, disposeError?):
+            throw AudioPreviewDisposeFailure(stopError: stopError, disposeError: disposeError)
+        }
+    }
+
+    private func takeAudioPreviewForDisposal() -> AudioPreviewState? {
+        audioPreviewLock.withLock { () -> AudioPreviewState? in
+            let state = audioPreviewState
+            audioPreviewState = nil
+            return state
+        }
+    }
+
+    private func finishDisposingAudioPreview(
+        _ state: AudioPreviewState,
+        teardown: @escaping @Sendable (CaptureAudioPreview) throws -> Void
+    ) async throws {
+        try await Self.finishDisposingAudioPreview(
+            state,
+            teardownQueue: audioPreviewTeardownQueue,
+            teardown: teardown
+        )
+    }
+
+    private static func finishDisposingAudioPreview(
+        _ state: AudioPreviewState,
+        teardownQueue: DispatchQueue,
+        teardown: @escaping @Sendable (CaptureAudioPreview) throws -> Void
+    ) async throws {
+        try await withCheckedThrowingContinuation { continuation in
+            state.inFlight.notify(queue: teardownQueue) {
+                do {
+                    try teardown(state.preview)
+                    continuation.resume()
+                } catch {
+                    continuation.resume(throwing: error)
+                }
+            }
+        }
+    }
+
+    private func disposeAudioPreview() async throws {
+        guard let state = takeAudioPreviewForDisposal() else { return }
+        try await finishDisposingAudioPreview(state, teardown: Self.teardownAudioPreview)
+    }
+
+    internal func testingSetAudioPreview(_ preview: CaptureAudioPreview?) {
+        setAudioPreview(preview)
+    }
+
+    @discardableResult
+    internal func testingWithAudioPreview<T>(_ body: (CaptureAudioPreview) throws -> T) rethrows -> T? {
+        try withAudioPreview(body)
+    }
+
+    internal func testingDisposeAudioPreview(
+        didTakeAudioPreviewState: (@Sendable () -> Void)? = nil,
+        teardown: @escaping @Sendable (CaptureAudioPreview) throws -> Void
+    ) async throws {
+        guard let state = takeAudioPreviewForDisposal() else { return }
+        didTakeAudioPreviewState?()
+        try await finishDisposingAudioPreview(state, teardown: teardown)
     }
     /* ============================================ */
     // MARK: - properties - Capturing video (set before capture)
@@ -731,10 +839,7 @@ public class CaptureManager: NSObject, DLABInputCaptureDelegate {
                 if let _ = parentView {
                     try await attachInputScreenPreview(to: nil) // @MainActor
                 }
-                if let preview = takeAudioPreview() {
-                    try preview.aqStop()
-                    try preview.aqDispose()
-                }
+                try await disposeAudioPreview()
                 
                 // support for timecode
                 timecodeReady = false
@@ -894,7 +999,8 @@ public class CaptureManager: NSObject, DLABInputCaptureDelegate {
         let writer = self.writer
         let videoPreview = self.videoPreview
         let parentView = self.parentView
-        let audioPreview = takeAudioPreview()
+        let audioPreviewState = takeAudioPreviewForDisposal()
+        let audioPreviewTeardownQueue = self.audioPreviewTeardownQueue
         let isRecording = self.recording
         let isVideoCaptureEnabled = self.videoCaptureEnabled
         let isAudioCaptureEnabled = self.audioCaptureEnabled
@@ -903,6 +1009,23 @@ public class CaptureManager: NSObject, DLABInputCaptureDelegate {
         Task.detached {
             // Avoid capturing self in the deinit task
             if verbose { print("CaptureManager.\(#function) - Task started") }
+
+            if let audioPreviewState {
+                do {
+                    try await Self.finishDisposingAudioPreview(
+                        audioPreviewState,
+                        teardownQueue: audioPreviewTeardownQueue,
+                        teardown: Self.teardownAudioPreview
+                    )
+                } catch let error as AudioPreviewDisposeFailure {
+                    if verbose {
+                        print("ERROR:CaptureManager.detachedCleanup - aqStop failed: \(error.stopError.domain)(\(error.stopError.code)): \(error.stopError.localizedFailureReason ?? error.stopError.localizedDescription)")
+                        print("ERROR:CaptureManager.detachedCleanup - aqDispose failed: \(error.disposeError.domain)(\(error.disposeError.code)): \(error.disposeError.localizedFailureReason ?? error.disposeError.localizedDescription)")
+                    }
+                } catch let error as NSError {
+                    if verbose { print("ERROR:CaptureManager.detachedCleanup - audio preview teardown failed: \(error.domain)(\(error.code)): \(error.localizedFailureReason ?? error.localizedDescription)") }
+                }
+            }
             
             if isRecording, let writer = writer {
                 await writer.closeSession() // actor isolated (writer)
@@ -936,16 +1059,6 @@ public class CaptureManager: NSObject, DLABInputCaptureDelegate {
                         catch {
                             if verbose { print("ERROR:CaptureManager.detachedCleanup - setInputScreenPreviewTo failed: \(error.localizedDescription)") }
                         }
-                    }
-                }
-                if let audioPreview = audioPreview {
-                    do { try audioPreview.aqStop() }
-                    catch {
-                        if verbose { print("ERROR:CaptureManager.detachedCleanup - aqStop failed: \(error.localizedDescription)") }
-                    }
-                    do { try audioPreview.aqDispose() }
-                    catch {
-                        if verbose { print("ERROR:CaptureManager.detachedCleanup - aqDispose failed: \(error.localizedDescription)") }
                     }
                 }
             }
@@ -1195,7 +1308,7 @@ public class CaptureManager: NSObject, DLABInputCaptureDelegate {
                 printVerbose("ERROR:CaptureManager.\(#function) - audio append failed: \(error.localizedDescription)")
             }
         }
-        if let preview = currentAudioPreview() {
+        withAudioPreview { preview in
             if preview.running == true {
                 do { try preview.enqueue(sampleBuffer) }
                 catch {
