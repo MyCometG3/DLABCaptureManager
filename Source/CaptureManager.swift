@@ -1299,6 +1299,7 @@ public class CaptureManager: NSObject, DLABInputCaptureDelegate {
     private func processCapturedAudioSampleAsync(_ info: UnsafeSampleBufferInfo) async {
         guard running else { return }
         let sampleBuffer = info.sampleBuffer
+        var audioPreviewStateToDispose: AudioPreviewState? = nil
         
         if let writer = currentAppendWriter() {
             let wrapper = UnsafeSampleBufferWrapper(sampleBuffer: sampleBuffer)
@@ -1332,9 +1333,19 @@ public class CaptureManager: NSObject, DLABInputCaptureDelegate {
                 catch {
                     audioPreviewError = error
                     printVerbose("ERROR:CaptureManager.\(#function) - audio preview aqStart failed: \(error.localizedDescription)")
-                    let _ = takeAudioPreviewForDisposal()
-                    try? preview.aqDispose()
+                    audioPreviewStateToDispose = takeAudioPreviewForDisposal()
                 }
+            }
+        }
+        
+        if let audioPreviewStateToDispose {
+            do {
+                try await finishDisposingAudioPreview(
+                    audioPreviewStateToDispose,
+                    teardown: { preview in try preview.aqDispose() }
+                )
+            } catch {
+                printVerbose("ERROR:CaptureManager.\(#function) - audio preview aqDispose failed: \(error.localizedDescription)")
             }
         }
     }

@@ -555,7 +555,7 @@ actor CaptureWriter {
                 traceStartup("open-session-total \(elapsedMS(from: startAt))ms")
             } catch {
                 avAssetWriter.cancelWriting()
-                self.avAssetWriter = nil
+                cleanUp()
                 throw error
             }
         } else {
