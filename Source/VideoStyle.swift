@@ -38,11 +38,17 @@ public enum VideoStyle : String, Sendable {
     case DCI2k_2048_1080_185  = "DCI2k 2048:1080 185"   // clap - square pixel
     case DCI2k_2048_1080_239  = "DCI2k 2048:1080 239"   // clap - square pixel
     
-    case UHD4k_3840_2160_Full  = "UHD4k 3840:2160 Full"   // square pixel
+    case UHD4k_3840_2160_Full  = "UHD4k 3840:2160 Full" // square pixel
     
     case DCI4k_4096_2160_Full = "DCI4k 4096:2160 Full"  // square pixel
     case DCI4k_4096_2160_185  = "DCI4k 4096:2160 185"   // clap - square pixel
     case DCI4k_4096_2160_239  = "DCI4k 4096:2160 239"   // clap - square pixel
+    
+    case UHD8k_7680_4320_Full  = "UHD8k 7680:4320 Full" // square pixel
+    
+    case DCI8k_8192_4320_Full = "DCI8k 8192:4320 Full"  // square pixel
+    case DCI8k_8192_4320_185  = "DCI8k 8192:4320 185"   // clap - square pixel
+    case DCI8k_8192_4320_239  = "DCI8k 8192:4320 239"   // clap - square pixel
     
     /// Get width/height parameters of encodedRect, visibleRect, and aspectRatio
     ///
@@ -190,6 +196,23 @@ public enum VideoStyle : String, Sendable {
             visibleWidth = 4096;    visibleHeight = 1716
             aspectHorizontal = 1;   aspectVertical = 1
             
+        case .UHD8k_7680_4320_Full: // 8K UHD FullAperture
+            encodedWidth = 7680;    encodedHeight = 4320
+            visibleWidth = 7680;    visibleHeight = 4320
+            aspectHorizontal = 1;   aspectVertical = 1
+            
+        case .DCI8k_8192_4320_Full: // DCI8k FullAperture
+            encodedWidth = 8192;    encodedHeight = 4320
+            visibleWidth = 8192;    visibleHeight = 4320
+            aspectHorizontal = 1;   aspectVertical = 1
+        case .DCI8k_8192_4320_185: // DCI8k Flat 1.85:1
+            encodedWidth = 8192;    encodedHeight = 4320
+            visibleWidth = 7992;    visibleHeight = 4320
+            aspectHorizontal = 1;   aspectVertical = 1
+        case .DCI8k_8192_4320_239: // DCI8k CinemaScope 2.39:1
+            encodedWidth = 8192;    encodedHeight = 4320
+            visibleWidth = 8192;    visibleHeight = 3432
+            aspectHorizontal = 1;   aspectVertical = 1
         }
         
         encW = encodedWidth

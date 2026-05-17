@@ -295,6 +295,17 @@ extension CaptureManager {
     public func videoStyleListOf(_ size:NSSize) -> [VideoStyle]? {
         var list:[VideoStyle] = [];
         
+        // DCI 8k
+        if NSEqualSizes(size, NSSize(width: 8192, height: 4320)) {
+            list = [.DCI8k_8192_4320_Full,
+                    .DCI8k_8192_4320_239, .DCI8k_8192_4320_185]
+        }
+        
+        // UHD 8k
+        if NSEqualSizes(size, NSSize(width: 7680, height: 4320)) {
+            list = [.UHD8k_7680_4320_Full]
+        }
+        
         // DCI 4k
         if NSEqualSizes(size, NSSize(width: 4096, height: 2160)) {
             list = [.DCI4k_4096_2160_Full,
