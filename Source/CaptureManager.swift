@@ -1332,6 +1332,8 @@ public class CaptureManager: NSObject, DLABInputCaptureDelegate {
                 catch {
                     audioPreviewError = error
                     printVerbose("ERROR:CaptureManager.\(#function) - audio preview aqStart failed: \(error.localizedDescription)")
+                    let _ = takeAudioPreviewForDisposal()
+                    try? preview.aqDispose()
                 }
             }
         }
