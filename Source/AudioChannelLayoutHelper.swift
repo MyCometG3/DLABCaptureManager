@@ -1,6 +1,6 @@
 //
 //  AudioProperties.swift
-//  DLABCaptureManager
+//  DLABCapture
 //
 //  Created by Takashi Mochizuki on 2025/07/27.
 //  Copyright © 2026 MyCometG3. All rights reserved.
@@ -699,17 +699,6 @@ extension CaptureWriter {
         }
         
         return true
-    }
-    
-    /* ============================================ */
-    // MARK: - AudioFormatID Utility Functions
-    /* ============================================ */
-    
-    /// Check if the given format ID is part of the AAC family.
-    /// - Parameter formatID: The AudioFormatID to check
-    /// - Returns: true if the format ID is part of the AAC family, false otherwise
-    private func isAACFamily(_ formatID: UInt32) -> Bool {
-        return (formatID >= kAudioFormatMPEG4AAC && formatID <= kAudioFormatMPEG4AAC_HE_V2)
     }
     
     /* ============================================ */

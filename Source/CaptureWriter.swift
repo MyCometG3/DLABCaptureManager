@@ -1181,13 +1181,6 @@ actor CaptureWriter: NSObject {
     // MARK: -
     /* ============================================ */
     
-    /// Check if the given format ID is part of the AAC family.
-    /// - Parameter formatID: The AudioFormatID to check
-    /// - Returns: true if the format ID is part of the AAC family, false otherwise
-    private func isAACFamily(_ formatID: UInt32) -> Bool {
-        return (formatID >= kAudioFormatMPEG4AAC && formatID <= kAudioFormatMPEG4AAC_HE_V2)
-    }
-    
     /// AAC encoder bitrate range
     private func queryBitrateRange<T: BinaryInteger>(channelCount: T) -> (min: T, max: T) {
         precondition(channelCount > 0, "Channel count must be positive")
@@ -1215,7 +1208,7 @@ actor CaptureWriter: NSObject {
             .failed     : "AVAssetWriterStatus.Failed",
             .cancelled  : "AVAssetWriterStatus.Cancelled"
         ]
-        let statusStr :String = statusArray[status]!
+        let statusStr = statusArray[status] ?? "Unknown(\(status.rawValue))"
         
         return statusStr
     }

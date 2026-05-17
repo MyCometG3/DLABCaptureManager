@@ -1,6 +1,6 @@
 //
 //  CaptureTimecodeHelper.swift
-//  DLABCaptureManager
+//  DLABCapture
 //
 //  Created by Takashi Mochizuki on 2017/10/01.
 //  Copyright © 2017-2026 MyCometG3. All rights reserved.
@@ -202,9 +202,6 @@ class CaptureTimecodeHelper: NSObject {
             frameNumber64 = -frameNumber64
         }
         
-        // TODO
-        let frameNumber32: Int32 = Int32(frameNumber64)
-        
         /* ============================================ */
         
         // Allocate BlockBuffer
@@ -226,6 +223,10 @@ class CaptureTimecodeHelper: NSObject {
         if let dataBuffer = dataBuffer {
             switch sizes {
             case MemoryLayout<Int32>.size:
+                guard let frameNumber32 = Int32(exactly: frameNumber64) else {
+                    print("ERROR: Could not represent frame number in Int32 (\(frameNumber64)).")
+                    return nil
+                }
                 var frameNumber32BE = frameNumber32.bigEndian
                 status = CMBlockBufferReplaceDataBytes(with: &frameNumber32BE,
                                                        blockBuffer: dataBuffer,
@@ -247,5 +248,12 @@ class CaptureTimecodeHelper: NSObject {
         }
         
         return dataBuffer
+    }
+
+    internal func testingPrepareTimeCodeDataBuffer(_ smpteTime: CVSMPTETime,
+                                                   sizes: Int,
+                                                   quanta: UInt32,
+                                                   tcType: UInt32) -> CMBlockBuffer? {
+        prepareTimeCodeDataBuffer(smpteTime, sizes, quanta, tcType)
     }
 }

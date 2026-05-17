@@ -102,6 +102,14 @@ private final class BoundedWorkQueue: @unchecked Sendable {
     }
 }
 
+private final class WeakParentViewBox: @unchecked Sendable {
+    weak var view: NSView?
+
+    init(view: NSView?) {
+        self.view = view
+    }
+}
+
 /// Extension to make CaptureManager conform to Sendable for cross-actor usage.
 ///
 /// Concurrency model — mutable state falls into these categories:
@@ -152,6 +160,7 @@ public class CaptureManager: NSObject, DLABInputCaptureDelegate {
     private let videoQueue = BoundedWorkQueue(maxDepth: 4)
     private var audioProcessorTask: Task<Void, Never>?
     private var videoProcessorTask: Task<Void, Never>?
+    private var parentViewUpdateTask: Task<Void, Never>?
     
     /* ============================================ */
     // MARK: - properties - Lock-protected runtime state
@@ -282,16 +291,18 @@ public class CaptureManager: NSObject, DLABInputCaptureDelegate {
     /// Expected to be read/written on the `@MainActor`.
     public weak var parentView: NSView? = nil {
         didSet {
-            Task { @MainActor in
-                guard let device = currentDevice else { return }
+            let requestedParentView = WeakParentViewBox(view: parentView)
+            parentViewUpdateTask?.cancel()
+            parentViewUpdateTask = Task { @MainActor [weak self] in
+                guard !Task.isCancelled, let self, let device = self.currentDevice else { return }
                 do {
-                    if let parentView = parentView {
-                        try device.setInputScreenPreviewTo(parentView)
+                    if let view = requestedParentView.view {
+                        try device.setInputScreenPreviewTo(view)
                     } else {
                         try device.setInputScreenPreviewTo(nil)
                     }
                 } catch let error as NSError {
-                    printVerbose("ERROR:\(error.domain)(\(error.code)): \(error.localizedFailureReason ?? "unknown reason")")
+                    self.printVerbose("ERROR:\(error.domain)(\(error.code)): \(error.localizedFailureReason ?? "unknown reason")")
                 }
             }
         }
@@ -955,16 +966,6 @@ public class CaptureManager: NSObject, DLABInputCaptureDelegate {
         try device.setInputScreenPreviewTo(parentView)
     }
     
-    private func createError(_ status :OSStatus, _ description :String?, _ failureReason :String?) -> NSError {
-        let domain = "com.MyCometG3.DLABCaptureManager.ErrorDomain"
-        let code = NSInteger(status)
-        let desc = description ?? "unknown description"
-        let reason = failureReason ?? "unknown failureReason"
-        let userInfo :[String:Any] = [NSLocalizedDescriptionKey:desc,
-                               NSLocalizedFailureReasonErrorKey:reason]
-        return NSError(domain: domain, code: code, userInfo: userInfo)
-    }
-    
     private func applyInputAncillaryPacketHandler(to device: DLABDevice) {
         device.inputAncillaryPacketHandler = inputAncillaryPacketHandler
     }
@@ -1109,6 +1110,23 @@ public class CaptureManager: NSObject, DLABInputCaptureDelegate {
     /* ============================================ */
     // MARK: - callback
     /* ============================================ */
+    
+    /// Callback method implementation - DLABInputCaptureDelegate
+    /// - Note: Automatic format reconfiguration is not supported.
+    ///   Events are logged for diagnostics but no state is changed.
+    public nonisolated func processInputFormatChange(
+        with videoSetting: DLABVideoSetting?,
+        events: DLABVideoInputFormatChangedEvent,
+        flags: DLABDetectedVideoInputFormatFlag,
+        of sender: DLABDevice
+    ) {
+        guard sender === currentDevice else { return }
+        guard verbose else { return }
+        let modeName = videoSetting?.name ?? "nil"
+        print(
+            "NOTICE: CaptureManager.processInputFormatChange - displayMode=\(modeName) events=0x\(String(events.rawValue, radix: 16)) flags=0x\(String(flags.rawValue, radix: 16))"
+        )
+    }
     
     /// Callback method implementation - DLABInputCaptureDelegate
     /// - Parameters:

@@ -1,6 +1,6 @@
 //
 //  CaptureManager+Util.swift
-//  DLABCaptureManager
+//  DLABCapture
 //
 //  Created by Takashi Mochizuki on 2025/07/06.
 //  Copyright © 2026 MyCometG3. All rights reserved.
@@ -10,6 +10,98 @@ import Cocoa
 @preconcurrency import DLABridging
 
 extension CaptureManager {
+    
+    // MARK: - Display mode timing table
+    
+    private struct DisplayModeTiming {
+        let timescale: CMTimeScale
+        let fps: Float
+    }
+    
+    private static let displayModeTiming: [DLABDisplayMode: DisplayModeTiming] = [
+        .modeNTSC:           DisplayModeTiming(timescale: 30000, fps: 30.0/1.001),
+        .modeNTSC2398:       DisplayModeTiming(timescale: 24000, fps: 24.0/1.001),
+        .modeNTSCp:          DisplayModeTiming(timescale: 60000, fps: 60.0/1.001),
+        .modePAL:            DisplayModeTiming(timescale: 25000, fps: 25.0),
+        .modePALp:           DisplayModeTiming(timescale: 50000, fps: 50.0),
+        
+        .modeHD720p50:       DisplayModeTiming(timescale: 50000, fps: 50.0),
+        .modeHD720p5994:     DisplayModeTiming(timescale: 60000, fps: 60.0/1.001),
+        .modeHD720p60:       DisplayModeTiming(timescale: 60000, fps: 60.0),
+        
+        .modeHD1080p2398:    DisplayModeTiming(timescale: 24000, fps: 24.0/1.001),
+        .modeHD1080p24:      DisplayModeTiming(timescale: 24000, fps: 24.0),
+        .modeHD1080p25:      DisplayModeTiming(timescale: 25000, fps: 25.0),
+        .modeHD1080p2997:    DisplayModeTiming(timescale: 30000, fps: 30.0/1.001),
+        .modeHD1080p30:      DisplayModeTiming(timescale: 30000, fps: 30.0),
+        .modeHD1080p4795:    DisplayModeTiming(timescale: 48000, fps: 48.0/1.001),
+        .modeHD1080p48:      DisplayModeTiming(timescale: 48000, fps: 48.0),
+        .modeHD1080i50:      DisplayModeTiming(timescale: 25000, fps: 25.0),
+        .modeHD1080i5994:    DisplayModeTiming(timescale: 30000, fps: 30.0/1.001),
+        .modeHD1080i6000:    DisplayModeTiming(timescale: 30000, fps: 30.0),
+        .modeHD1080p50:      DisplayModeTiming(timescale: 50000, fps: 50.0),
+        .modeHD1080p5994:    DisplayModeTiming(timescale: 60000, fps: 60.0/1.001),
+        .modeHD1080p6000:    DisplayModeTiming(timescale: 60000, fps: 60.0),
+        .modeHD1080p9590:    DisplayModeTiming(timescale: 96000, fps: 96.0/1.001),
+        .modeHD1080p96:      DisplayModeTiming(timescale: 96000, fps: 96.0),
+        .modeHD1080p100:     DisplayModeTiming(timescale: 100000, fps: 100.0),
+        .modeHD1080p11988:   DisplayModeTiming(timescale: 120000, fps: 120.0/1.001),
+        .modeHD1080p120:     DisplayModeTiming(timescale: 120000, fps: 120.0),
+        
+        .mode2k2398:         DisplayModeTiming(timescale: 24000, fps: 24.0/1.001),
+        .mode2k24:           DisplayModeTiming(timescale: 24000, fps: 24.0),
+        .mode2k25:           DisplayModeTiming(timescale: 25000, fps: 25.0),
+        
+        .mode2kDCI2398:      DisplayModeTiming(timescale: 24000, fps: 24.0/1.001),
+        .mode2kDCI24:        DisplayModeTiming(timescale: 24000, fps: 24.0),
+        .mode2kDCI25:        DisplayModeTiming(timescale: 25000, fps: 25.0),
+        .mode2kDCI2997:      DisplayModeTiming(timescale: 30000, fps: 30.0/1.001),
+        .mode2kDCI30:        DisplayModeTiming(timescale: 30000, fps: 30.0),
+        .mode2kDCI4795:      DisplayModeTiming(timescale: 48000, fps: 48.0/1.001),
+        .mode2kDCI48:        DisplayModeTiming(timescale: 48000, fps: 48.0),
+        .mode2kDCI50:        DisplayModeTiming(timescale: 50000, fps: 50.0),
+        .mode2kDCI5994:      DisplayModeTiming(timescale: 60000, fps: 60.0/1.001),
+        .mode2kDCI60:        DisplayModeTiming(timescale: 60000, fps: 60.0),
+        .mode2kDCI9590:      DisplayModeTiming(timescale: 96000, fps: 96.0/1.001),
+        .mode2kDCI96:        DisplayModeTiming(timescale: 96000, fps: 96.0),
+        .mode2kDCI100:       DisplayModeTiming(timescale: 100000, fps: 100.0),
+        .mode2kDCI11988:     DisplayModeTiming(timescale: 120000, fps: 120.0/1.001),
+        .mode2kDCI120:       DisplayModeTiming(timescale: 120000, fps: 120.0),
+        
+        .mode4K2160p2398:    DisplayModeTiming(timescale: 24000, fps: 24.0/1.001),
+        .mode4K2160p24:      DisplayModeTiming(timescale: 24000, fps: 24.0),
+        .mode4K2160p25:      DisplayModeTiming(timescale: 25000, fps: 25.0),
+        .mode4K2160p2997:    DisplayModeTiming(timescale: 30000, fps: 30.0/1.001),
+        .mode4K2160p30:      DisplayModeTiming(timescale: 30000, fps: 30.0),
+        .mode4K2160p4795:    DisplayModeTiming(timescale: 48000, fps: 48.0/1.001),
+        .mode4K2160p48:      DisplayModeTiming(timescale: 48000, fps: 48.0),
+        .mode4K2160p50:      DisplayModeTiming(timescale: 50000, fps: 50.0),
+        .mode4K2160p5994:    DisplayModeTiming(timescale: 60000, fps: 60.0/1.001),
+        .mode4K2160p60:      DisplayModeTiming(timescale: 60000, fps: 60.0),
+        .mode4K2160p9590:    DisplayModeTiming(timescale: 96000, fps: 96.0/1.001),
+        .mode4K2160p96:      DisplayModeTiming(timescale: 96000, fps: 96.0),
+        .mode4K2160p100:     DisplayModeTiming(timescale: 100000, fps: 100.0),
+        .mode4K2160p11988:   DisplayModeTiming(timescale: 120000, fps: 120.0/1.001),
+        .mode4K2160p120:     DisplayModeTiming(timescale: 120000, fps: 120.0),
+        
+        .mode4kDCI2398:      DisplayModeTiming(timescale: 24000, fps: 24.0/1.001),
+        .mode4kDCI24:        DisplayModeTiming(timescale: 24000, fps: 24.0),
+        .mode4kDCI25:        DisplayModeTiming(timescale: 25000, fps: 25.0),
+        .mode4kDCI2997:      DisplayModeTiming(timescale: 30000, fps: 30.0/1.001),
+        .mode4kDCI30:        DisplayModeTiming(timescale: 30000, fps: 30.0),
+        .mode4kDCI4795:      DisplayModeTiming(timescale: 48000, fps: 48.0/1.001),
+        .mode4kDCI48:        DisplayModeTiming(timescale: 48000, fps: 48.0),
+        .mode4kDCI50:        DisplayModeTiming(timescale: 50000, fps: 50.0),
+        .mode4kDCI5994:      DisplayModeTiming(timescale: 60000, fps: 60.0/1.001),
+        .mode4kDCI60:        DisplayModeTiming(timescale: 60000, fps: 60.0),
+        .mode4kDCI9590:      DisplayModeTiming(timescale: 96000, fps: 96.0/1.001),
+        .mode4kDCI96:        DisplayModeTiming(timescale: 96000, fps: 96.0),
+        .mode4kDCI100:       DisplayModeTiming(timescale: 100000, fps: 100.0),
+        .mode4kDCI11988:     DisplayModeTiming(timescale: 120000, fps: 120.0/1.001),
+        .mode4kDCI120:       DisplayModeTiming(timescale: 120000, fps: 120.0),
+        
+        // TODO .mode8K...
+    ]
     
     /* ============================================ */
     // MARK: - public utility
@@ -132,202 +224,16 @@ extension CaptureManager {
     
     /// Native Timescale for DisplayMode
     /// - Parameter targetDisplayMode: DLABDisplayMode
-    /// - Returns: CMTimeScale
+    /// - Returns: The native CMTimeScale for the display mode, or nil when the mode is unsupported.
     public func nativeTimescaleFor(_ targetDisplayMode:DLABDisplayMode) -> CMTimeScale? {
-        let mode2scale :[DLABDisplayMode:CMTimeScale] = [
-            .modeNTSC           :30000,
-            .modeNTSC2398       :24000,
-            .modeNTSCp          :60000,
-            .modePAL            :25000,
-            .modePALp           :50000,
-            
-            .modeHD720p50       :50000,
-            .modeHD720p5994     :60000,
-            .modeHD720p60       :60000,
-            
-            .modeHD1080p2398    :24000,
-            .modeHD1080p24      :24000,
-            
-            .modeHD1080p25      :25000,
-            .modeHD1080p2997    :30000,
-            .modeHD1080p30      :30000,
-            
-            .modeHD1080p4795    :48000,
-            .modeHD1080p48      :48000,
-            
-            .modeHD1080i50      :25000,
-            .modeHD1080i5994    :30000,
-            .modeHD1080i6000    :30000,
-            
-            .modeHD1080p50      :50000,
-            .modeHD1080p5994    :60000,
-            .modeHD1080p6000    :60000,
-            
-            .modeHD1080p9590    :96000,
-            .modeHD1080p96      :96000,
-            .modeHD1080p100     :100000,
-            .modeHD1080p11988   :120000,
-            .modeHD1080p120     :120000,
-            
-            .mode2k2398         :24000,
-            .mode2k24           :24000,
-            .mode2k25           :25000,
-            
-            .mode2kDCI2398      :24000,
-            .mode2kDCI24        :24000,
-            .mode2kDCI25        :25000,
-            .mode2kDCI2997      :30000,
-            .mode2kDCI30        :30000,
-            .mode2kDCI4795      :48000,
-            .mode2kDCI48        :48000,
-            .mode2kDCI50        :50000,
-            .mode2kDCI5994      :60000,
-            .mode2kDCI60        :60000,
-            .mode2kDCI9590      :96000,
-            .mode2kDCI96        :96000,
-            .mode2kDCI100       :100000,
-            .mode2kDCI11988     :120000,
-            .mode2kDCI120       :120000,
-            
-            .mode4K2160p2398    :24000,
-            .mode4K2160p24      :24000,
-            .mode4K2160p25      :25000,
-            .mode4K2160p2997    :30000,
-            .mode4K2160p30      :30000,
-            .mode4K2160p4795    :48000,
-            .mode4K2160p48      :48000,
-            .mode4K2160p50      :50000,
-            .mode4K2160p5994    :60000,
-            .mode4K2160p60      :60000,
-            .mode4K2160p9590    :96000,
-            .mode4K2160p96      :96000,
-            .mode4K2160p100     :100000,
-            .mode4K2160p11988   :120000,
-            .mode4K2160p120     :120000,
-            
-            .mode4kDCI2398      :24000,
-            .mode4kDCI24        :24000,
-            .mode4kDCI25        :25000,
-            .mode4kDCI2997      :30000,
-            .mode4kDCI30        :30000,
-            .mode4kDCI4795      :48000,
-            .mode4kDCI48        :48000,
-            .mode4kDCI50        :50000,
-            .mode4kDCI5994      :60000,
-            .mode4kDCI60        :60000,
-            .mode4kDCI9590      :96000,
-            .mode4kDCI96        :96000,
-            .mode4kDCI100       :100000,
-            .mode4kDCI11988     :120000,
-            .mode4kDCI120       :120000,
-            
-            // TODO .mode8K...
-        ]
-        
-        if let timeScale = mode2scale[targetDisplayMode] {
-            return timeScale
-        }
-        return nil
+        Self.displayModeTiming[targetDisplayMode]?.timescale
     }
     
     /// Native video frame rate for DisplayMode
     /// - Parameter targetDisplayMode: DLABDisplayMode
-    /// - Returns: FPS in Float
+    /// - Returns: The native frame rate for the display mode, or nil when the mode is unsupported.
     public func nativeFPSFor(_ targetDisplayMode:DLABDisplayMode) -> Float? {
-        let mode2fps :[DLABDisplayMode:Float] = [
-            .modeNTSC           :30.0/1.001,
-            .modeNTSC2398       :30.0/1.001,
-            .modeNTSCp          :60.0/1.001,
-            .modePAL            :25.0,
-            .modePALp           :50.0,
-            
-            .modeHD720p50       :50.0,
-            .modeHD720p5994     :60.0/1.001,
-            .modeHD720p60       :60.0,
-            
-            .modeHD1080p2398    :24.0/1.001,
-            .modeHD1080p24      :24.0,
-            
-            .modeHD1080p25      :25.0,
-            .modeHD1080p2997    :30.0/1.001,
-            .modeHD1080p30      :30.0,
-            
-            .modeHD1080p4795    :48.0/1.001,
-            .modeHD1080p48      :48.0,
-            
-            .modeHD1080i50      :25.0,
-            .modeHD1080i5994    :30.0/1.001,
-            .modeHD1080i6000    :30.0,
-            
-            .modeHD1080p50      :50.0,
-            .modeHD1080p5994    :60.0/1.001,
-            .modeHD1080p6000    :60.0,
-            
-            .modeHD1080p9590    :96.0/1.001,
-            .modeHD1080p96      :96.0,
-            .modeHD1080p100     :100.0,
-            .modeHD1080p11988   :120.0/1.001,
-            .modeHD1080p120     :120.0,
-            
-            .mode2k2398         :24.0/1.001,
-            .mode2k24           :24.0,
-            .mode2k25           :25.0,
-            
-            .mode2kDCI2398      :24.0/1.001,
-            .mode2kDCI24        :24.0,
-            .mode2kDCI25        :25.0,
-            .mode2kDCI2997      :30.0/1.001,
-            .mode2kDCI30        :30.0,
-            .mode2kDCI4795      :48.0/1.001,
-            .mode2kDCI48        :48.0,
-            .mode2kDCI50        :50.0,
-            .mode2kDCI5994      :60.0/1.001,
-            .mode2kDCI60        :60.0,
-            .mode2kDCI9590      :96.0/1.001,
-            .mode2kDCI96        :96.0,
-            .mode2kDCI100       :100.0,
-            .mode2kDCI11988     :120.0/1.001,
-            .mode2kDCI120       :120.0,
-            
-            .mode4K2160p2398    :24.0/1.001,
-            .mode4K2160p24      :24.0,
-            .mode4K2160p25      :25.0,
-            .mode4K2160p2997    :30.0/1.001,
-            .mode4K2160p30      :30.0,
-            .mode4K2160p4795    :48.0/1.001,
-            .mode4K2160p48      :48.0,
-            .mode4K2160p50      :50.0,
-            .mode4K2160p5994    :60.0/1.001,
-            .mode4K2160p60      :60.0,
-            .mode4K2160p9590    :96.0/1.001,
-            .mode4K2160p96      :96.0,
-            .mode4K2160p100     :100.0,
-            .mode4K2160p11988   :120.0/1.001,
-            .mode4K2160p120     :120.0,
-            
-            .mode4kDCI2398      :24.0/1.001,
-            .mode4kDCI24        :24.0,
-            .mode4kDCI25        :25.0,
-            .mode4kDCI2997      :30.0/1.001,
-            .mode4kDCI30        :30.0,
-            .mode4kDCI4795      :48.0/1.001,
-            .mode4kDCI48        :48.0,
-            .mode4kDCI50        :50.0,
-            .mode4kDCI5994      :60.0/1.001,
-            .mode4kDCI60        :60.0,
-            .mode4kDCI9590      :96.0/1.001,
-            .mode4kDCI96        :96.0,
-            .mode4kDCI100       :100.0,
-            .mode4kDCI11988     :120.0/1.001,
-            .mode4kDCI120       :120.0,
-            
-            // TODO .mode8K...
-        ]
-        
-        if let fps = mode2fps[targetDisplayMode] {
-            return fps
-        }
-        return nil
+        Self.displayModeTiming[targetDisplayMode]?.fps
     }
     
     /// Supported DLABDisplayMode list
