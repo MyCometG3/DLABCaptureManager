@@ -798,6 +798,9 @@ public class CaptureManager: NSObject, DLABInputCaptureDelegate {
                 }
             } catch let error as NSError {
                 printVerbose("ERROR:\(error.domain)(\(error.code)): \(error.localizedFailureReason ?? "unknown reason")")
+                if let device = currentDevice {
+                    await rollbackCaptureStart(on: device)
+                }
             }
         }  else {
             printVerbose("ERROR: device is not ready")
@@ -858,6 +861,49 @@ public class CaptureManager: NSObject, DLABInputCaptureDelegate {
         }
         
         return false
+    }
+    
+    private func rollbackCaptureStart(on device: DLABDevice) async {
+        device.inputDelegate = nil
+        clearInputAncillaryPacketHandler(from: device)
+        
+        if audioCaptureEnabled {
+            do {
+                try device.disableAudioInput()
+                audioCaptureEnabled = false
+            } catch let error as NSError {
+                printVerbose("ERROR:CaptureManager.rollbackCaptureStart - disableAudioInput failed: \(error.domain)(\(error.code)): \(error.localizedFailureReason ?? error.localizedDescription)")
+            }
+        }
+        if videoCaptureEnabled {
+            do {
+                try device.disableVideoInput()
+                videoCaptureEnabled = false
+            } catch let error as NSError {
+                printVerbose("ERROR:CaptureManager.rollbackCaptureStart - disableVideoInput failed: \(error.domain)(\(error.code)): \(error.localizedFailureReason ?? error.localizedDescription)")
+            }
+        }
+        
+        if let videoPreview = videoPreview {
+            await videoPreview.shutdown()
+        }
+        if parentView != nil {
+            do {
+                try await attachInputScreenPreview(to: nil)
+            } catch let error as NSError {
+                printVerbose("ERROR:CaptureManager.rollbackCaptureStart - attachInputScreenPreview failed: \(error.domain)(\(error.code)): \(error.localizedFailureReason ?? error.localizedDescription)")
+            }
+        }
+        
+        do {
+            try await disposeAudioPreview()
+        } catch let error as NSError {
+            printVerbose("ERROR:CaptureManager.rollbackCaptureStart - disposeAudioPreview failed: \(error.domain)(\(error.code)): \(error.localizedFailureReason ?? error.localizedDescription)")
+        }
+        
+        timecodeReady = false
+        clearTimecodeHelper()
+        running = false
     }
     
     /// Toggle recording using current session
