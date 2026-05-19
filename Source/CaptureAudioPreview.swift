@@ -110,13 +110,15 @@ class CaptureAudioPreview: NSObject, @unchecked Sendable {
         
         // Create AudioQueue
         var status :OSStatus = -1
-        let inCallbackBlock :AudioQueueOutputCallbackBlock = {[asbd] (aqRef, aqBufRef) in
+        let inCallbackBlock :AudioQueueOutputCallbackBlock = {[weak self, asbd] (aqRef, aqBufRef) in
+            guard let self = self else { return }
             // - We do not enqueue in callback here (= pull model).
             // - Separate enqueue() is used instead (= push model).
             let wrapper = UnsafeAudioQueueWrapper(asbd: asbd,
                                                   aqRef: aqRef,
                                                   aqBufferRef: aqBufRef)
-            self.queueAsync { [wrapper] in
+            self.queueAsync { [weak self, wrapper] in
+                guard let self = self else { return }
                 let asbd = wrapper.asbd
                 let aqBufRef = wrapper.aqBufferRef
                 
