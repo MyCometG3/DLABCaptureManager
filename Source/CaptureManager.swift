@@ -1100,7 +1100,7 @@ public class CaptureManager: NSObject, DLABInputCaptureDelegate {
                     await videoPreview.shutdown() // @MainActor
                 }
                 if parentView != nil {
-                    DispatchQueue.main.async { [device] in
+                    await MainActor.run { [device] in
                         do { try device.setInputScreenPreviewTo(nil) }
                         catch {
                             if verbose { print("ERROR:CaptureManager.detachedCleanup - setInputScreenPreviewTo failed: \(error.localizedDescription)") }
