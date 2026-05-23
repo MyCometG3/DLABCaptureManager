@@ -73,10 +73,20 @@ public enum TimecodeType: Int, Sendable {
 private final class BoundedWorkQueue: @unchecked Sendable {
     private let lock = UnfairLockBox()
     private var items: [@Sendable () async -> Void] = []
+    private var isFinished = false
+    private let signalStream: AsyncStream<Void>
+    private let signalContinuation: AsyncStream<Void>.Continuation
     let maxDepth: Int
     
     init(maxDepth: Int) {
         self.maxDepth = maxDepth
+        var continuation: AsyncStream<Void>.Continuation!
+        self.signalStream = AsyncStream(bufferingPolicy: .bufferingNewest(1)) { continuation = $0 }
+        self.signalContinuation = continuation
+    }
+    
+    deinit {
+        finish()
     }
     
     /// Attempt to enqueue a work item.
@@ -85,8 +95,9 @@ private final class BoundedWorkQueue: @unchecked Sendable {
     /// the caller should drop the sample.  Never blocks.
     func enqueue(_ work: @escaping @Sendable () async -> Void) -> Bool {
         lock.withLock {
-            guard items.count < maxDepth else { return false }
+            guard !isFinished, items.count < maxDepth else { return false }
             items.append(work)
+            signalContinuation.yield(())
             return true
         }
     }
@@ -99,6 +110,19 @@ private final class BoundedWorkQueue: @unchecked Sendable {
             items = []
             return result
         }
+    }
+    
+    func finish() {
+        lock.withLock {
+            guard !isFinished else { return }
+            isFinished = true
+            items.removeAll()
+        }
+        signalContinuation.finish()
+    }
+    
+    var signals: AsyncStream<Void> {
+        signalStream
     }
 }
 
@@ -631,30 +655,30 @@ public class CaptureManager: NSObject, DLABInputCaptureDelegate {
         
         // print("CaptureManager.\(#function)")
         
-        // NOTE: idle wakeup uses Task.yield(); a future refinement could
-        // use a continuation-based signal instead of a spin-yield loop.
         audioProcessorTask = Task(priority: .high) { [audioQueue] in
-            while !Task.isCancelled {
-                let batch = audioQueue.takeAll()
-                if batch.isEmpty {
-                    await Task.yield()
-                    continue
-                }
-                for work in batch {
-                    await work()
+            for await _ in audioQueue.signals {
+                while !Task.isCancelled {
+                    let batch = audioQueue.takeAll()
+                    if batch.isEmpty {
+                        break
+                    }
+                    for work in batch {
+                        await work()
+                    }
                 }
             }
         }
         
         videoProcessorTask = Task(priority: .high) { [videoQueue] in
-            while !Task.isCancelled {
-                let batch = videoQueue.takeAll()
-                if batch.isEmpty {
-                    await Task.yield()
-                    continue
-                }
-                for work in batch {
-                    await work()
+            for await _ in videoQueue.signals {
+                while !Task.isCancelled {
+                    let batch = videoQueue.takeAll()
+                    if batch.isEmpty {
+                        break
+                    }
+                    for work in batch {
+                        await work()
+                    }
                 }
             }
         }
@@ -837,7 +861,9 @@ public class CaptureManager: NSObject, DLABInputCaptureDelegate {
                 
                 // Disable Preview
                 if let videoPreview = videoPreview {
-                    await videoPreview.shutdown() // @MainActor
+                    await MainActor.run {
+                        videoPreview.shutdown()
+                    }
                 }
                 if let _ = parentView {
                     try await attachInputScreenPreview(to: nil) // @MainActor
@@ -885,7 +911,9 @@ public class CaptureManager: NSObject, DLABInputCaptureDelegate {
         }
         
         if let videoPreview = videoPreview {
-            await videoPreview.shutdown()
+            await MainActor.run {
+                videoPreview.shutdown()
+            }
         }
         if parentView != nil {
             do {
@@ -1034,6 +1062,8 @@ public class CaptureManager: NSObject, DLABInputCaptureDelegate {
         running = false
         _ = audioQueue.takeAll()
         _ = videoQueue.takeAll()
+        audioQueue.finish()
+        videoQueue.finish()
         
         audioProcessorTask?.cancel()
         videoProcessorTask?.cancel()
@@ -1097,7 +1127,9 @@ public class CaptureManager: NSObject, DLABInputCaptureDelegate {
                     }
                 }
                 if let videoPreview = videoPreview {
-                    await videoPreview.shutdown() // @MainActor
+                    await MainActor.run {
+                        videoPreview.shutdown()
+                    }
                 }
                 if parentView != nil {
                     await MainActor.run { [device] in
