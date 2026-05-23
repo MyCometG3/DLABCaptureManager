@@ -73,10 +73,20 @@ public enum TimecodeType: Int, Sendable {
 private final class BoundedWorkQueue: @unchecked Sendable {
     private let lock = UnfairLockBox()
     private var items: [@Sendable () async -> Void] = []
+    private var isFinished = false
+    private let signalStream: AsyncStream<Void>
+    private let signalContinuation: AsyncStream<Void>.Continuation
     let maxDepth: Int
     
     init(maxDepth: Int) {
         self.maxDepth = maxDepth
+        var continuation: AsyncStream<Void>.Continuation!
+        self.signalStream = AsyncStream(bufferingPolicy: .bufferingNewest(1)) { continuation = $0 }
+        self.signalContinuation = continuation
+    }
+    
+    deinit {
+        finish()
     }
     
     /// Attempt to enqueue a work item.
@@ -85,8 +95,9 @@ private final class BoundedWorkQueue: @unchecked Sendable {
     /// the caller should drop the sample.  Never blocks.
     func enqueue(_ work: @escaping @Sendable () async -> Void) -> Bool {
         lock.withLock {
-            guard items.count < maxDepth else { return false }
+            guard !isFinished, items.count < maxDepth else { return false }
             items.append(work)
+            signalContinuation.yield(())
             return true
         }
     }
@@ -99,6 +110,19 @@ private final class BoundedWorkQueue: @unchecked Sendable {
             items = []
             return result
         }
+    }
+    
+    func finish() {
+        lock.withLock {
+            guard !isFinished else { return }
+            isFinished = true
+            items.removeAll()
+        }
+        signalContinuation.finish()
+    }
+    
+    var signals: AsyncStream<Void> {
+        signalStream
     }
 }
 
@@ -631,30 +655,30 @@ public class CaptureManager: NSObject, DLABInputCaptureDelegate {
         
         // print("CaptureManager.\(#function)")
         
-        // NOTE: idle wakeup uses Task.yield(); a future refinement could
-        // use a continuation-based signal instead of a spin-yield loop.
         audioProcessorTask = Task(priority: .high) { [audioQueue] in
-            while !Task.isCancelled {
-                let batch = audioQueue.takeAll()
-                if batch.isEmpty {
-                    await Task.yield()
-                    continue
-                }
-                for work in batch {
-                    await work()
+            for await _ in audioQueue.signals {
+                while !Task.isCancelled {
+                    let batch = audioQueue.takeAll()
+                    if batch.isEmpty {
+                        break
+                    }
+                    for work in batch {
+                        await work()
+                    }
                 }
             }
         }
         
         videoProcessorTask = Task(priority: .high) { [videoQueue] in
-            while !Task.isCancelled {
-                let batch = videoQueue.takeAll()
-                if batch.isEmpty {
-                    await Task.yield()
-                    continue
-                }
-                for work in batch {
-                    await work()
+            for await _ in videoQueue.signals {
+                while !Task.isCancelled {
+                    let batch = videoQueue.takeAll()
+                    if batch.isEmpty {
+                        break
+                    }
+                    for work in batch {
+                        await work()
+                    }
                 }
             }
         }
@@ -812,48 +836,72 @@ public class CaptureManager: NSObject, DLABInputCaptureDelegate {
     @discardableResult
     public func captureStopAsync() async -> Bool {
         if let device = currentDevice, running == true {
+            stopError = nil
             if recording {
                 await recordToggleAsync() // actor isolated (writer)
             }
             
             printVerbose("CaptureManager.\(#function) - Stop capture session...")
+            running = false
             
             do {
-                // Stop stream
                 try device.stopStreams()
-                running = false
-                device.inputDelegate = nil
-                clearInputAncillaryPacketHandler(from: device)
-                
-                // Disable Capture
-                if videoCaptureEnabled {
-                    try device.disableVideoInput()
-                    videoCaptureEnabled = false
-                }
-                if audioCaptureEnabled {
-                    try device.disableAudioInput()
-                    audioCaptureEnabled = false
-                }
-                
-                // Disable Preview
-                if let videoPreview = videoPreview {
-                    await videoPreview.shutdown() // @MainActor
-                }
-                if let _ = parentView {
-                    try await attachInputScreenPreview(to: nil) // @MainActor
-                }
-                try await disposeAudioPreview()
-                
-                // support for timecode
-                timecodeReady = false
-                clearTimecodeHelper()
-                
-                stopError = nil
-                printVerbose("CaptureManager.\(#function) - Stop capture session completed")
-                return true
             } catch let error as NSError {
                 printVerbose("ERROR:CaptureManager.\(#function) - \(error.domain)(\(error.code)): \(error.localizedFailureReason ?? "unknown reason")")
                 stopError = error
+            }
+            
+            device.inputDelegate = nil
+            clearInputAncillaryPacketHandler(from: device)
+            
+            // Disable Capture
+            if videoCaptureEnabled {
+                do {
+                    try device.disableVideoInput()
+                    videoCaptureEnabled = false
+                } catch let error as NSError {
+                    printVerbose("ERROR:CaptureManager.\(#function) - disableVideoInput failed: \(error.domain)(\(error.code)): \(error.localizedFailureReason ?? error.localizedDescription)")
+                    if stopError == nil { stopError = error }
+                }
+            }
+            if audioCaptureEnabled {
+                do {
+                    try device.disableAudioInput()
+                    audioCaptureEnabled = false
+                } catch let error as NSError {
+                    printVerbose("ERROR:CaptureManager.\(#function) - disableAudioInput failed: \(error.domain)(\(error.code)): \(error.localizedFailureReason ?? error.localizedDescription)")
+                    if stopError == nil { stopError = error }
+                }
+            }
+            
+            // Disable Preview
+            if let videoPreview = videoPreview {
+                await MainActor.run {
+                    videoPreview.shutdown()
+                }
+            }
+            if let _ = parentView {
+                do {
+                    try await attachInputScreenPreview(to: nil) // @MainActor
+                } catch let error as NSError {
+                    printVerbose("ERROR:CaptureManager.\(#function) - attachInputScreenPreview failed: \(error.domain)(\(error.code)): \(error.localizedFailureReason ?? error.localizedDescription)")
+                    if stopError == nil { stopError = error }
+                }
+            }
+            do {
+                try await disposeAudioPreview()
+            } catch let error as NSError {
+                printVerbose("ERROR:CaptureManager.\(#function) - disposeAudioPreview failed: \(error.domain)(\(error.code)): \(error.localizedFailureReason ?? error.localizedDescription)")
+                if stopError == nil { stopError = error }
+            }
+            
+            // support for timecode
+            timecodeReady = false
+            clearTimecodeHelper()
+            
+            if stopError == nil {
+                printVerbose("CaptureManager.\(#function) - Stop capture session completed")
+                return true
             }
         } else {
             printVerbose("ERROR:CaptureManager.\(#function) - device is not ready")
@@ -885,7 +933,9 @@ public class CaptureManager: NSObject, DLABInputCaptureDelegate {
         }
         
         if let videoPreview = videoPreview {
-            await videoPreview.shutdown()
+            await MainActor.run {
+                videoPreview.shutdown()
+            }
         }
         if parentView != nil {
             do {
@@ -1034,6 +1084,8 @@ public class CaptureManager: NSObject, DLABInputCaptureDelegate {
         running = false
         _ = audioQueue.takeAll()
         _ = videoQueue.takeAll()
+        audioQueue.finish()
+        videoQueue.finish()
         
         audioProcessorTask?.cancel()
         videoProcessorTask?.cancel()
@@ -1097,7 +1149,9 @@ public class CaptureManager: NSObject, DLABInputCaptureDelegate {
                     }
                 }
                 if let videoPreview = videoPreview {
-                    await videoPreview.shutdown() // @MainActor
+                    await MainActor.run {
+                        videoPreview.shutdown()
+                    }
                 }
                 if parentView != nil {
                     await MainActor.run { [device] in
