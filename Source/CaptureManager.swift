@@ -836,6 +836,7 @@ public class CaptureManager: NSObject, DLABInputCaptureDelegate {
     @discardableResult
     public func captureStopAsync() async -> Bool {
         if let device = currentDevice, running == true {
+            stopError = nil
             if recording {
                 await recordToggleAsync() // actor isolated (writer)
             }
