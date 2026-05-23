@@ -9,12 +9,18 @@
 import Foundation
 import CoreMedia
 
-class CaptureTimecodeHelper: NSObject {
+/// Timecode helper for CoreAudio SMPTETime extraction.
+///
+/// Marked `@unchecked Sendable` because:
+/// - `timeCodeFormatType` is immutable (`let`) after init
+/// - All public methods are read-only (no mutable state)
+/// - Instance storage in CaptureManager is lock-protected via `timecodeHelperLock`
+final class CaptureTimecodeHelper: NSObject, @unchecked Sendable {
     /// Special CoreAudio SMPTE Time - embeded as CMSampleBuffer attachment
     private let smpteTimeKey : String = "com.apple.cmio.buffer_attachment.core_audio_smpte_time"
     
     /// Default Timecode format : either TimeCode32 or TimeCode64
-    public var timeCodeFormatType : CMTimeCodeFormatType = kCMTimeCodeFormatType_TimeCode32
+    public let timeCodeFormatType: CMTimeCodeFormatType
     
     /* ============================================ */
     // MARK: - public init/deinit
@@ -24,9 +30,8 @@ class CaptureTimecodeHelper: NSObject {
     ///
     /// - Parameter typeValue: CMTimeCodeFormatType either Timecode32 or TimeCode64.
     init(formatType typeValue : CMTimeCodeFormatType) {
+        self.timeCodeFormatType = typeValue
         super.init()
-        
-        timeCodeFormatType = typeValue
         
         // print("TimecodeHelper.init")
     }
