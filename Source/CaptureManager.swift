@@ -841,45 +841,66 @@ public class CaptureManager: NSObject, DLABInputCaptureDelegate {
             }
             
             printVerbose("CaptureManager.\(#function) - Stop capture session...")
+            running = false
             
             do {
-                // Stop stream
                 try device.stopStreams()
-                running = false
-                device.inputDelegate = nil
-                clearInputAncillaryPacketHandler(from: device)
-                
-                // Disable Capture
-                if videoCaptureEnabled {
-                    try device.disableVideoInput()
-                    videoCaptureEnabled = false
-                }
-                if audioCaptureEnabled {
-                    try device.disableAudioInput()
-                    audioCaptureEnabled = false
-                }
-                
-                // Disable Preview
-                if let videoPreview = videoPreview {
-                    await MainActor.run {
-                        videoPreview.shutdown()
-                    }
-                }
-                if let _ = parentView {
-                    try await attachInputScreenPreview(to: nil) // @MainActor
-                }
-                try await disposeAudioPreview()
-                
-                // support for timecode
-                timecodeReady = false
-                clearTimecodeHelper()
-                
-                stopError = nil
-                printVerbose("CaptureManager.\(#function) - Stop capture session completed")
-                return true
             } catch let error as NSError {
                 printVerbose("ERROR:CaptureManager.\(#function) - \(error.domain)(\(error.code)): \(error.localizedFailureReason ?? "unknown reason")")
                 stopError = error
+            }
+            
+            device.inputDelegate = nil
+            clearInputAncillaryPacketHandler(from: device)
+            
+            // Disable Capture
+            if videoCaptureEnabled {
+                do {
+                    try device.disableVideoInput()
+                    videoCaptureEnabled = false
+                } catch let error as NSError {
+                    printVerbose("ERROR:CaptureManager.\(#function) - disableVideoInput failed: \(error.domain)(\(error.code)): \(error.localizedFailureReason ?? error.localizedDescription)")
+                    if stopError == nil { stopError = error }
+                }
+            }
+            if audioCaptureEnabled {
+                do {
+                    try device.disableAudioInput()
+                    audioCaptureEnabled = false
+                } catch let error as NSError {
+                    printVerbose("ERROR:CaptureManager.\(#function) - disableAudioInput failed: \(error.domain)(\(error.code)): \(error.localizedFailureReason ?? error.localizedDescription)")
+                    if stopError == nil { stopError = error }
+                }
+            }
+            
+            // Disable Preview
+            if let videoPreview = videoPreview {
+                await MainActor.run {
+                    videoPreview.shutdown()
+                }
+            }
+            if let _ = parentView {
+                do {
+                    try await attachInputScreenPreview(to: nil) // @MainActor
+                } catch let error as NSError {
+                    printVerbose("ERROR:CaptureManager.\(#function) - attachInputScreenPreview failed: \(error.domain)(\(error.code)): \(error.localizedFailureReason ?? error.localizedDescription)")
+                    if stopError == nil { stopError = error }
+                }
+            }
+            do {
+                try await disposeAudioPreview()
+            } catch let error as NSError {
+                printVerbose("ERROR:CaptureManager.\(#function) - disposeAudioPreview failed: \(error.domain)(\(error.code)): \(error.localizedFailureReason ?? error.localizedDescription)")
+                if stopError == nil { stopError = error }
+            }
+            
+            // support for timecode
+            timecodeReady = false
+            clearTimecodeHelper()
+            
+            if stopError == nil {
+                printVerbose("CaptureManager.\(#function) - Stop capture session completed")
+                return true
             }
         } else {
             printVerbose("ERROR:CaptureManager.\(#function) - device is not ready")
