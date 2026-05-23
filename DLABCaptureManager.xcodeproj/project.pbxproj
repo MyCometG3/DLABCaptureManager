@@ -12,8 +12,6 @@
 		161180E52E19EB7A00C4EA8D /* VideoSampleBufferHelper.swift in Sources */ = {isa = PBXBuildFile; fileRef = 161180E42E19EB7A00C4EA8D /* VideoSampleBufferHelper.swift */; };
 		162A7C5E2F12345600BEE001 /* RecordedMovieTimeRangeNormalizer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 162A7C5D2F12345600BEE001 /* RecordedMovieTimeRangeNormalizer.swift */; };
 		163BE4ED2E359A0500150D80 /* AudioChannelLayoutHelper.swift in Sources */ = {isa = PBXBuildFile; fileRef = 163BE4EC2E359A0500150D80 /* AudioChannelLayoutHelper.swift */; };
-		16F0A0012FABCD0100000001 /* AACFamilyHelper.swift in Sources */ = {isa = PBXBuildFile; fileRef = 16F0A0012FABCD0100000002 /* AACFamilyHelper.swift */; };
-		16F0A0012FABCD0100000003 /* CaptureErrorHelper.swift in Sources */ = {isa = PBXBuildFile; fileRef = 16F0A0012FABCD0100000004 /* CaptureErrorHelper.swift */; };
 		168CD3311F9EA1980098EC35 /* DLABridging.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 16DC284C1F9C2D1E008AA3A2 /* DLABridging.framework */; };
 		16DC28341F9C2C0C008AA3A2 /* DLABCaptureManager.h in Headers */ = {isa = PBXBuildFile; fileRef = 16DC28321F9C2C0C008AA3A2 /* DLABCaptureManager.h */; settings = {ATTRIBUTES = (Public, ); }; };
 		16DC283F1F9C2C1C008AA3A2 /* CaptureWriter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 16DC283A1F9C2C1C008AA3A2 /* CaptureWriter.swift */; };
@@ -21,6 +19,8 @@
 		16DC28411F9C2C1C008AA3A2 /* CaptureAudioPreview.swift in Sources */ = {isa = PBXBuildFile; fileRef = 16DC283C1F9C2C1C008AA3A2 /* CaptureAudioPreview.swift */; };
 		16DC28421F9C2C1C008AA3A2 /* CaptureManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 16DC283D1F9C2C1C008AA3A2 /* CaptureManager.swift */; };
 		16DC28431F9C2C1C008AA3A2 /* VideoStyle.swift in Sources */ = {isa = PBXBuildFile; fileRef = 16DC283E1F9C2C1C008AA3A2 /* VideoStyle.swift */; };
+		16F0A0012FABCD0100000001 /* AACFamilyHelper.swift in Sources */ = {isa = PBXBuildFile; fileRef = 16F0A0012FABCD0100000002 /* AACFamilyHelper.swift */; };
+		16F0A0012FABCD0100000003 /* CaptureErrorHelper.swift in Sources */ = {isa = PBXBuildFile; fileRef = 16F0A0012FABCD0100000004 /* CaptureErrorHelper.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -29,8 +29,6 @@
 		161180E42E19EB7A00C4EA8D /* VideoSampleBufferHelper.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VideoSampleBufferHelper.swift; sourceTree = "<group>"; };
 		162A7C5D2F12345600BEE001 /* RecordedMovieTimeRangeNormalizer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecordedMovieTimeRangeNormalizer.swift; sourceTree = "<group>"; };
 		163BE4EC2E359A0500150D80 /* AudioChannelLayoutHelper.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioChannelLayoutHelper.swift; sourceTree = "<group>"; };
-		16F0A0012FABCD0100000002 /* AACFamilyHelper.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AACFamilyHelper.swift; sourceTree = "<group>"; };
-		16F0A0012FABCD0100000004 /* CaptureErrorHelper.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CaptureErrorHelper.swift; sourceTree = "<group>"; };
 		16DC282F1F9C2C0C008AA3A2 /* DLABCaptureManager.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; includeInIndex = 0; path = DLABCaptureManager.framework; sourceTree = BUILT_PRODUCTS_DIR; };
 		16DC28321F9C2C0C008AA3A2 /* DLABCaptureManager.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = DLABCaptureManager.h; sourceTree = "<group>"; };
 		16DC28331F9C2C0C008AA3A2 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
@@ -40,6 +38,8 @@
 		16DC283D1F9C2C1C008AA3A2 /* CaptureManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CaptureManager.swift; sourceTree = "<group>"; };
 		16DC283E1F9C2C1C008AA3A2 /* VideoStyle.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VideoStyle.swift; sourceTree = "<group>"; };
 		16DC284C1F9C2D1E008AA3A2 /* DLABridging.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; path = DLABridging.framework; sourceTree = BUILT_PRODUCTS_DIR; };
+		16F0A0012FABCD0100000002 /* AACFamilyHelper.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AACFamilyHelper.swift; sourceTree = "<group>"; };
+		16F0A0012FABCD0100000004 /* CaptureErrorHelper.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CaptureErrorHelper.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -141,7 +141,7 @@
 			isa = PBXProject;
 			attributes = {
 				BuildIndependentTargetsInParallel = YES;
-				LastUpgradeCheck = 2640;
+				LastUpgradeCheck = 2650;
 				ORGANIZATIONNAME = MyCometG3;
 				TargetAttributes = {
 					16DC282E1F9C2C0C008AA3A2 = {
@@ -333,7 +333,7 @@
 				BUILD_LIBRARY_FOR_DISTRIBUTION = YES;
 				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "Apple Development";
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 2026.05.10;
+				CURRENT_PROJECT_VERSION = 2026.05.24;
 				DEAD_CODE_STRIPPING = YES;
 				DEFINES_MODULE = YES;
 				DYLIB_COMPATIBILITY_VERSION = 1;
@@ -348,7 +348,7 @@
 					"@executable_path/../Frameworks",
 					"@loader_path/Frameworks",
 				);
-				MARKETING_VERSION = 0.10.2b1;
+				MARKETING_VERSION = 0.10.2;
 				MODULE_VERIFIER_SUPPORTED_LANGUAGES = "objective-c objective-c++";
 				MODULE_VERIFIER_SUPPORTED_LANGUAGE_STANDARDS = "gnu17 gnu++20";
 				PRODUCT_BUNDLE_IDENTIFIER = com.mycometg3.DLABCaptureManager;
@@ -364,7 +364,7 @@
 				BUILD_LIBRARY_FOR_DISTRIBUTION = YES;
 				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "Apple Development";
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 2026.05.10;
+				CURRENT_PROJECT_VERSION = 2026.05.24;
 				DEAD_CODE_STRIPPING = YES;
 				DEFINES_MODULE = YES;
 				DYLIB_COMPATIBILITY_VERSION = 1;
@@ -379,7 +379,7 @@
 					"@executable_path/../Frameworks",
 					"@loader_path/Frameworks",
 				);
-				MARKETING_VERSION = 0.10.2b1;
+				MARKETING_VERSION = 0.10.2;
 				MODULE_VERIFIER_SUPPORTED_LANGUAGES = "objective-c objective-c++";
 				MODULE_VERIFIER_SUPPORTED_LANGUAGE_STANDARDS = "gnu17 gnu++20";
 				PRODUCT_BUNDLE_IDENTIFIER = com.mycometg3.DLABCaptureManager;

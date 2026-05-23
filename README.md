@@ -96,9 +96,9 @@ NOTE: This framework is under development.
     manager = nil
 
 #### Development environment
-- macOS 26.4.1 Tahoe
-- Xcode 26.4.1
-- Swift 6.3.1
+- macOS 26.5 Tahoe
+- Xcode 26.5
+- Swift 6.3.2
 
 #### License
 - The MIT License
