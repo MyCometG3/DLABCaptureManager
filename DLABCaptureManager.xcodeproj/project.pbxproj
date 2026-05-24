@@ -7,40 +7,42 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
-		160397511FA819CF000ED345 /* CaptureVideoPreview.swift in Sources */ = {isa = PBXBuildFile; fileRef = 160397501FA819CF000ED345 /* CaptureVideoPreview.swift */; };
-		161180E32E19EAE400C4EA8D /* CaptureManager+Util.swift in Sources */ = {isa = PBXBuildFile; fileRef = 161180E22E19EAE400C4EA8D /* CaptureManager+Util.swift */; };
-		161180E52E19EB7A00C4EA8D /* VideoSampleBufferHelper.swift in Sources */ = {isa = PBXBuildFile; fileRef = 161180E42E19EB7A00C4EA8D /* VideoSampleBufferHelper.swift */; };
-		162A7C5E2F12345600BEE001 /* RecordedMovieTimeRangeNormalizer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 162A7C5D2F12345600BEE001 /* RecordedMovieTimeRangeNormalizer.swift */; };
-		163BE4ED2E359A0500150D80 /* AudioChannelLayoutHelper.swift in Sources */ = {isa = PBXBuildFile; fileRef = 163BE4EC2E359A0500150D80 /* AudioChannelLayoutHelper.swift */; };
 		168CD3311F9EA1980098EC35 /* DLABridging.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 16DC284C1F9C2D1E008AA3A2 /* DLABridging.framework */; };
-		16DC28341F9C2C0C008AA3A2 /* DLABCaptureManager.h in Headers */ = {isa = PBXBuildFile; fileRef = 16DC28321F9C2C0C008AA3A2 /* DLABCaptureManager.h */; settings = {ATTRIBUTES = (Public, ); }; };
-		16DC283F1F9C2C1C008AA3A2 /* CaptureWriter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 16DC283A1F9C2C1C008AA3A2 /* CaptureWriter.swift */; };
-		16DC28401F9C2C1C008AA3A2 /* CaptureTimecodeHelper.swift in Sources */ = {isa = PBXBuildFile; fileRef = 16DC283B1F9C2C1C008AA3A2 /* CaptureTimecodeHelper.swift */; };
-		16DC28411F9C2C1C008AA3A2 /* CaptureAudioPreview.swift in Sources */ = {isa = PBXBuildFile; fileRef = 16DC283C1F9C2C1C008AA3A2 /* CaptureAudioPreview.swift */; };
-		16DC28421F9C2C1C008AA3A2 /* CaptureManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 16DC283D1F9C2C1C008AA3A2 /* CaptureManager.swift */; };
-		16DC28431F9C2C1C008AA3A2 /* VideoStyle.swift in Sources */ = {isa = PBXBuildFile; fileRef = 16DC283E1F9C2C1C008AA3A2 /* VideoStyle.swift */; };
-		16F0A0012FABCD0100000001 /* AACFamilyHelper.swift in Sources */ = {isa = PBXBuildFile; fileRef = 16F0A0012FABCD0100000002 /* AACFamilyHelper.swift */; };
-		16F0A0012FABCD0100000003 /* CaptureErrorHelper.swift in Sources */ = {isa = PBXBuildFile; fileRef = 16F0A0012FABCD0100000004 /* CaptureErrorHelper.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
-		160397501FA819CF000ED345 /* CaptureVideoPreview.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CaptureVideoPreview.swift; sourceTree = "<group>"; };
-		161180E22E19EAE400C4EA8D /* CaptureManager+Util.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "CaptureManager+Util.swift"; sourceTree = "<group>"; };
-		161180E42E19EB7A00C4EA8D /* VideoSampleBufferHelper.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VideoSampleBufferHelper.swift; sourceTree = "<group>"; };
-		162A7C5D2F12345600BEE001 /* RecordedMovieTimeRangeNormalizer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecordedMovieTimeRangeNormalizer.swift; sourceTree = "<group>"; };
-		163BE4EC2E359A0500150D80 /* AudioChannelLayoutHelper.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioChannelLayoutHelper.swift; sourceTree = "<group>"; };
 		16DC282F1F9C2C0C008AA3A2 /* DLABCaptureManager.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; includeInIndex = 0; path = DLABCaptureManager.framework; sourceTree = BUILT_PRODUCTS_DIR; };
-		16DC28321F9C2C0C008AA3A2 /* DLABCaptureManager.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = DLABCaptureManager.h; sourceTree = "<group>"; };
-		16DC28331F9C2C0C008AA3A2 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
-		16DC283A1F9C2C1C008AA3A2 /* CaptureWriter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CaptureWriter.swift; sourceTree = "<group>"; };
-		16DC283B1F9C2C1C008AA3A2 /* CaptureTimecodeHelper.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CaptureTimecodeHelper.swift; sourceTree = "<group>"; };
-		16DC283C1F9C2C1C008AA3A2 /* CaptureAudioPreview.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CaptureAudioPreview.swift; sourceTree = "<group>"; };
-		16DC283D1F9C2C1C008AA3A2 /* CaptureManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CaptureManager.swift; sourceTree = "<group>"; };
-		16DC283E1F9C2C1C008AA3A2 /* VideoStyle.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VideoStyle.swift; sourceTree = "<group>"; };
 		16DC284C1F9C2D1E008AA3A2 /* DLABridging.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; path = DLABridging.framework; sourceTree = BUILT_PRODUCTS_DIR; };
-		16F0A0012FABCD0100000002 /* AACFamilyHelper.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AACFamilyHelper.swift; sourceTree = "<group>"; };
-		16F0A0012FABCD0100000004 /* CaptureErrorHelper.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CaptureErrorHelper.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
+
+/* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+		16ABF7992FC2FF82000C82E5 /* Exceptions for "DLABCaptureManager" folder in "DLABCaptureManager" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				DLABCaptureManager.h,
+			);
+			publicHeaders = (
+				DLABCaptureManager.h,
+			);
+			target = 16DC282E1F9C2C0C008AA3A2 /* DLABCaptureManager */;
+		};
+/* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
+
+/* Begin PBXFileSystemSynchronizedRootGroup section */
+		16ABF7972FC2FF81000C82E5 /* DLABCaptureManager */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				16ABF7992FC2FF82000C82E5 /* Exceptions for "DLABCaptureManager" folder in "DLABCaptureManager" target */,
+			);
+			path = DLABCaptureManager;
+			sourceTree = "<group>";
+		};
+		16ABF7A62FC2FF87000C82E5 /* Source */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = Source;
+			sourceTree = "<group>";
+		};
+/* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
 		16DC282B1F9C2C0C008AA3A2 /* Frameworks */ = {
@@ -52,30 +54,11 @@
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
-		16B29FDC1F9C2FE0003D2D1D /* Source */ = {
-			isa = PBXGroup;
-			children = (
-				16DC283D1F9C2C1C008AA3A2 /* CaptureManager.swift */,
-				161180E22E19EAE400C4EA8D /* CaptureManager+Util.swift */,
-				16DC283E1F9C2C1C008AA3A2 /* VideoStyle.swift */,
-				16DC283A1F9C2C1C008AA3A2 /* CaptureWriter.swift */,
-				162A7C5D2F12345600BEE001 /* RecordedMovieTimeRangeNormalizer.swift */,
-				16F0A0012FABCD0100000002 /* AACFamilyHelper.swift */,
-				163BE4EC2E359A0500150D80 /* AudioChannelLayoutHelper.swift */,
-				16F0A0012FABCD0100000004 /* CaptureErrorHelper.swift */,
-				16DC283B1F9C2C1C008AA3A2 /* CaptureTimecodeHelper.swift */,
-				16DC283C1F9C2C1C008AA3A2 /* CaptureAudioPreview.swift */,
-				160397501FA819CF000ED345 /* CaptureVideoPreview.swift */,
-				161180E42E19EB7A00C4EA8D /* VideoSampleBufferHelper.swift */,
-			);
-			path = Source;
-			sourceTree = "<group>";
-		};
 		16DC28251F9C2C0C008AA3A2 = {
 			isa = PBXGroup;
 			children = (
-				16B29FDC1F9C2FE0003D2D1D /* Source */,
-				16DC28311F9C2C0C008AA3A2 /* DLABCaptureManager */,
+				16ABF7A62FC2FF87000C82E5 /* Source */,
+				16ABF7972FC2FF81000C82E5 /* DLABCaptureManager */,
 				16DC28301F9C2C0C008AA3A2 /* Products */,
 				16DC284A1F9C2D1E008AA3A2 /* Frameworks */,
 			);
@@ -87,15 +70,6 @@
 				16DC282F1F9C2C0C008AA3A2 /* DLABCaptureManager.framework */,
 			);
 			name = Products;
-			sourceTree = "<group>";
-		};
-		16DC28311F9C2C0C008AA3A2 /* DLABCaptureManager */ = {
-			isa = PBXGroup;
-			children = (
-				16DC28321F9C2C0C008AA3A2 /* DLABCaptureManager.h */,
-				16DC28331F9C2C0C008AA3A2 /* Info.plist */,
-			);
-			path = DLABCaptureManager;
 			sourceTree = "<group>";
 		};
 		16DC284A1F9C2D1E008AA3A2 /* Frameworks */ = {
@@ -112,7 +86,6 @@
 		16DC282C1F9C2C0C008AA3A2 /* Headers */ = {
 			isa = PBXHeadersBuildPhase;
 			files = (
-				16DC28341F9C2C0C008AA3A2 /* DLABCaptureManager.h in Headers */,
 			);
 		};
 /* End PBXHeadersBuildPhase section */
@@ -128,6 +101,9 @@
 				16DC282D1F9C2C0C008AA3A2 /* Resources */,
 			);
 			buildRules = (
+			);
+			fileSystemSynchronizedGroups = (
+				16ABF7A62FC2FF87000C82E5 /* Source */,
 			);
 			name = DLABCaptureManager;
 			productName = DLABCaptureManager;
@@ -181,18 +157,6 @@
 		16DC282A1F9C2C0C008AA3A2 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			files = (
-				16DC28401F9C2C1C008AA3A2 /* CaptureTimecodeHelper.swift in Sources */,
-				16DC28421F9C2C1C008AA3A2 /* CaptureManager.swift in Sources */,
-				161180E32E19EAE400C4EA8D /* CaptureManager+Util.swift in Sources */,
-				161180E52E19EB7A00C4EA8D /* VideoSampleBufferHelper.swift in Sources */,
-				162A7C5E2F12345600BEE001 /* RecordedMovieTimeRangeNormalizer.swift in Sources */,
-				16F0A0012FABCD0100000001 /* AACFamilyHelper.swift in Sources */,
-				163BE4ED2E359A0500150D80 /* AudioChannelLayoutHelper.swift in Sources */,
-				16F0A0012FABCD0100000003 /* CaptureErrorHelper.swift in Sources */,
-				16DC28431F9C2C1C008AA3A2 /* VideoStyle.swift in Sources */,
-				16DC283F1F9C2C1C008AA3A2 /* CaptureWriter.swift in Sources */,
-				16DC28411F9C2C1C008AA3A2 /* CaptureAudioPreview.swift in Sources */,
-				160397511FA819CF000ED345 /* CaptureVideoPreview.swift in Sources */,
 			);
 		};
 /* End PBXSourcesBuildPhase section */
