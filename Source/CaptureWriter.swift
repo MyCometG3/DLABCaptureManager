@@ -712,10 +712,10 @@ actor CaptureWriter {
         }
         
         //
-        updateTimeStamp(sampleBuffer)
         let result = avAssetWriterInputAudio.append(sampleBuffer)
-        
-        if !result {
+        if result {
+            updateTimeStamp(sampleBuffer)
+        } else {
             if let avAssetWriter = avAssetWriter, let error = avAssetWriter.error {
                 let reason = error.localizedDescription
                 throw CaptureWriterError.audioSampleBufferAppendFailed(reason)
@@ -747,10 +747,14 @@ actor CaptureWriter {
         if let avAssetWriterInputVideo = avAssetWriterInputVideo {
             if avAssetWriterInputVideo.isReadyForMoreMediaData {
                 //
-                updateTimeStamp(sampleBuffer)
                 let result = avAssetWriterInputVideo.append(sampleBuffer)
-                
-                if !result {
+                if result {
+                    updateTimeStamp(sampleBuffer)
+                    if traceStartupTiming, !loggedFirstVideoAppend, openSessionStartedAt > 0 {
+                        loggedFirstVideoAppend = true
+                        traceStartup("first-video-append \(elapsedMS(from: openSessionStartedAt))ms")
+                    }
+                } else {
                     if let avAssetWriter = avAssetWriter, let error = avAssetWriter.error {
                         let reason = error.localizedDescription
                         throw CaptureWriterError.videoSampleBufferAppendFailed(reason)
@@ -759,9 +763,6 @@ actor CaptureWriter {
                         let reason = "ERROR: Could not write video sample buffer.(\(statusStr))"
                         throw CaptureWriterError.videoSampleBufferAppendFailed(reason)
                     }
-                } else if traceStartupTiming, !loggedFirstVideoAppend, openSessionStartedAt > 0 {
-                    loggedFirstVideoAppend = true
-                    traceStartup("first-video-append \(elapsedMS(from: openSessionStartedAt))ms")
                 }
             } else {
                 let reason = "ERROR: AVAssetWriterInputVideo is not ready to append."
@@ -777,10 +778,10 @@ actor CaptureWriter {
         if let avAssetWriterInputTimeCode = avAssetWriterInputTimecode {
             if avAssetWriterInputTimeCode.isReadyForMoreMediaData {
                 //
-                updateTimeStamp(sampleBuffer)
                 let result = avAssetWriterInputTimeCode.append(sampleBuffer)
-                
-                if !result {
+                if result {
+                    updateTimeStamp(sampleBuffer)
+                } else {
                     if let avAssetWriter = avAssetWriter, let error = avAssetWriter.error {
                         let reason = error.localizedDescription
                         throw CaptureWriterError.timecodeSampleBufferAppendFailed(reason)
