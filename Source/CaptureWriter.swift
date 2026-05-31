@@ -665,22 +665,22 @@ actor CaptureWriter {
         duration = 0.0
     }
     
-    private func updateTimeStamp(_ sampleBuffer: CMSampleBuffer) {
-        // Update InitialTimeStamp and EndTimeStamp
-        let sbPresentation = CMSampleBufferGetPresentationTimeStamp(sampleBuffer)
-        let sbDuration = CMSampleBufferGetDuration(sampleBuffer)
-        
-        // Set startTime CMTime value
-        if let avAssetWriter = avAssetWriter, isInitialTSReady == false {
-            // Set initial SourceTime value for AVAssetWriter
-            avAssetWriter.startSession(atSourceTime: sbPresentation)
-            
-            // Set initial time stamp for session
-            isInitialTSReady = true
-            startTime = sbPresentation
+    private func startSessionIfNeeded(_ sampleBuffer: CMSampleBuffer) {
+        guard let avAssetWriter = avAssetWriter, isInitialTSReady == false else {
+            return
         }
         
-        // Update endTime/duration CMTime value
+        let sbPresentation = CMSampleBufferGetPresentationTimeStamp(sampleBuffer)
+        avAssetWriter.startSession(atSourceTime: sbPresentation)
+        isInitialTSReady = true
+        startTime = sbPresentation
+        endTime = sbPresentation
+    }
+    
+    private func updateTimeStamp(_ sampleBuffer: CMSampleBuffer) {
+        // Update EndTimeStamp and duration after a successful append.
+        let sbPresentation = CMSampleBufferGetPresentationTimeStamp(sampleBuffer)
+        let sbDuration = CMSampleBufferGetDuration(sampleBuffer)
         endTime = CMTimeAdd(sbPresentation, sbDuration)
         duration = CMTimeGetSeconds(CMTimeSubtract(endTime, startTime))
     }
@@ -728,6 +728,8 @@ actor CaptureWriter {
     }
     
     private func writeAudioSampleBuffer(_ sampleBuffer: CMSampleBuffer) throws {
+        startSessionIfNeeded(sampleBuffer)
+        
         // For MPEG4 AAC encoding, remap the channel order
         if encodeAudio, isAACFamily(encodeAudioFormatID) {
             guard let remappedBuffer = remapLPCMChannelOrderForAAC(sampleBuffer, self.audioChannelLayoutOutputType) else {
@@ -746,6 +748,8 @@ actor CaptureWriter {
     private func writeVideoSampleBuffer(_ sampleBuffer: CMSampleBuffer) throws {
         if let avAssetWriterInputVideo = avAssetWriterInputVideo {
             if avAssetWriterInputVideo.isReadyForMoreMediaData {
+                startSessionIfNeeded(sampleBuffer)
+                
                 //
                 let result = avAssetWriterInputVideo.append(sampleBuffer)
                 if result {
@@ -777,6 +781,8 @@ actor CaptureWriter {
     private func writeTimecodeSampleBuffer(_ sampleBuffer: CMSampleBuffer) throws {
         if let avAssetWriterInputTimeCode = avAssetWriterInputTimecode {
             if avAssetWriterInputTimeCode.isReadyForMoreMediaData {
+                startSessionIfNeeded(sampleBuffer)
+                
                 //
                 let result = avAssetWriterInputTimeCode.append(sampleBuffer)
                 if result {
