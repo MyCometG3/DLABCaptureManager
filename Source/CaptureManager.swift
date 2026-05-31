@@ -199,7 +199,16 @@ public class CaptureManager: NSObject, DLABInputCaptureDelegate {
     }
     
     /// Verbose mode (debugging purpose)
-    public var verbose: Bool = false
+    private let verboseLock = UnfairLockBox()
+    private var verboseStorage: Bool = false
+    public var verbose: Bool {
+        get {
+            verboseLock.withLock { verboseStorage }
+        }
+        set {
+            verboseLock.withLock { verboseStorage = newValue }
+        }
+    }
     
     /* ============================================ */
     // MARK: - properties - Sample processing backpressure
