@@ -128,7 +128,7 @@ private final class BoundedWorkQueue: @unchecked Sendable {
 
 private final class WeakParentViewBox: @unchecked Sendable {
     weak var view: NSView?
-
+    
     init(view: NSView?) {
         self.view = view
     }
@@ -137,7 +137,7 @@ private final class WeakParentViewBox: @unchecked Sendable {
 private final class LockedWeakReferenceBox<Value: AnyObject>: @unchecked Sendable {
     private let lock = UnfairLockBox()
     private weak var storage: Value?
-
+    
     var value: Value? {
         get { lock.withLock { storage } }
         set { lock.withLock { storage = newValue } }
@@ -147,13 +147,13 @@ private final class LockedWeakReferenceBox<Value: AnyObject>: @unchecked Sendabl
 private final class LockedOptionalValueBox<Value>: @unchecked Sendable {
     private let lock = UnfairLockBox()
     private var storage: Value?
-
+    
     func withLock<T>(_ body: (inout Value?) -> T) -> T {
         lock.withLock {
             body(&storage)
         }
     }
-
+    
     var value: Value? {
         get { withLock { $0 } }
         set { withLock { $0 = newValue } }
@@ -163,7 +163,7 @@ private final class LockedOptionalValueBox<Value>: @unchecked Sendable {
 private struct AudioPreviewDisposeFailure: LocalizedError {
     let stopError: NSError
     let disposeError: NSError
-
+    
     var errorDescription: String? {
         "Audio preview teardown failed."
     }
@@ -1262,7 +1262,7 @@ public class CaptureManager: NSObject, DLABInputCaptureDelegate {
     private func clearInputAncillaryPacketHandler(from device: DLABDevice) {
         device.inputAncillaryPacketHandler = nil
     }
-
+    
     private func currentInputAncillaryPacketHandlerGeneration() -> UInt64 {
         inputAncillaryPacketHandlerLock.withLock { _ in inputAncillaryPacketHandlerGeneration }
     }
