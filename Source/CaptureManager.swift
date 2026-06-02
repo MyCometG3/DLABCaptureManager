@@ -128,16 +128,42 @@ private final class BoundedWorkQueue: @unchecked Sendable {
 
 private final class WeakParentViewBox: @unchecked Sendable {
     weak var view: NSView?
-    
+
     init(view: NSView?) {
         self.view = view
+    }
+}
+
+private final class LockedWeakReferenceBox<Value: AnyObject>: @unchecked Sendable {
+    private let lock = UnfairLockBox()
+    private weak var storage: Value?
+
+    var value: Value? {
+        get { lock.withLock { storage } }
+        set { lock.withLock { storage = newValue } }
+    }
+}
+
+private final class LockedOptionalValueBox<Value>: @unchecked Sendable {
+    private let lock = UnfairLockBox()
+    private var storage: Value?
+
+    func withLock<T>(_ body: (inout Value?) -> T) -> T {
+        lock.withLock {
+            body(&storage)
+        }
+    }
+
+    var value: Value? {
+        get { withLock { $0 } }
+        set { withLock { $0 = newValue } }
     }
 }
 
 private struct AudioPreviewDisposeFailure: LocalizedError {
     let stopError: NSError
     let disposeError: NSError
-    
+
     var errorDescription: String? {
         "Audio preview teardown failed."
     }
@@ -168,12 +194,13 @@ private final class AudioPreviewState: @unchecked Sendable {
 /// - Set-before-capture configuration: audio/video/encoder parameters
 ///   expected to be configured before ``captureStartAsync()`` and not
 ///   mutated concurrently during capture.
-/// - UI / MainActor references: ``videoPreview`` and ``parentView`` are
-///   weak and expected to be read/written on the main thread / actor.
+/// - UI references: ``videoPreview`` and ``parentView`` are weak and
+///   protected by locks so they can be snapshot safely from background
+///   capture paths.
 /// - Callback references: ``inputAncillaryPacketHandler``,
 ///   ``recordedMoviePostProcessErrorHandler``, and
 ///   ``captureWriterDiagnosticHandler`` are controlled-mutation
-///   callbacks.
+///   callbacks, with `inputAncillaryPacketHandler` lock-protected.
 /// - Backpressure / queue state: ``BoundedWorkQueue`` instances are
 ///   lock-protected and shared between callback threads and persistent
 ///   processor ``Task``s.
@@ -218,7 +245,10 @@ public class CaptureManager: NSObject, DLABInputCaptureDelegate {
     private let videoQueue = BoundedWorkQueue(maxDepth: 4)
     private var audioProcessorTask: Task<Void, Never>?
     private var videoProcessorTask: Task<Void, Never>?
-    private var parentViewUpdateTask: Task<Void, Never>?
+    private let parentViewLock = UnfairLockBox()
+    private weak var parentViewStorage: NSView?
+    private var parentViewUpdateTaskStorage: Task<Void, Never>?
+    private var parentViewUpdateGeneration: UInt64 = 0
     
     /* ============================================ */
     // MARK: - properties - Lock-protected runtime state
@@ -425,17 +455,30 @@ public class CaptureManager: NSObject, DLABInputCaptureDelegate {
         set { withRuntimeState { $0.videoCaptureEnabled = newValue } }
     }
     /// Set CaptureVideoPreview view here - based on AVSampleBufferDisplayLayer.
-    /// Expected to be read/written on the `@MainActor`.
-    public weak var videoPreview: CaptureVideoPreview? = nil
+    /// Backed by a lock so capture callbacks can snapshot it safely.
+    private let videoPreviewLock = LockedWeakReferenceBox<CaptureVideoPreview>()
+    public var videoPreview: CaptureVideoPreview? {
+        get { videoPreviewLock.value }
+        set { videoPreviewLock.value = newValue }
+    }
     
     /// Parent NSView for video preview - based on CreateCocoaScreenPreview().
-    /// Expected to be read/written on the `@MainActor`.
-    public weak var parentView: NSView? = nil {
-        didSet {
-            let requestedParentView = WeakParentViewBox(view: parentView)
-            parentViewUpdateTask?.cancel()
-            parentViewUpdateTask = Task { @MainActor [weak self] in
+    /// Backed by a lock so capture callbacks can snapshot it safely.
+    public var parentView: NSView? {
+        get { parentViewLock.withLock { parentViewStorage } }
+        set {
+            let requestedParentView = WeakParentViewBox(view: newValue)
+            let (generation, previousTask) = parentViewLock.withLock {
+                parentViewUpdateGeneration &+= 1
+                let task = parentViewUpdateTaskStorage
+                parentViewStorage = newValue
+                parentViewUpdateTaskStorage = nil
+                return (parentViewUpdateGeneration, task)
+            }
+            previousTask?.cancel()
+            let updateTask = Task { @MainActor [weak self] in
                 guard !Task.isCancelled, let self, let device = self.currentDevice else { return }
+                guard self.parentViewLock.withLock({ self.parentViewUpdateGeneration == generation }) else { return }
                 do {
                     if let view = requestedParentView.view {
                         try device.setInputScreenPreviewTo(view)
@@ -445,6 +488,14 @@ public class CaptureManager: NSObject, DLABInputCaptureDelegate {
                 } catch let error as NSError {
                     self.printVerbose("ERROR:\(error.domain)(\(error.code)): \(error.localizedFailureReason ?? "unknown reason")")
                 }
+            }
+            let stored = parentViewLock.withLock {
+                guard parentViewUpdateGeneration == generation else { return false }
+                parentViewUpdateTaskStorage = updateTask
+                return true
+            }
+            if !stored {
+                updateTask.cancel()
             }
         }
     }
@@ -646,11 +697,19 @@ public class CaptureManager: NSObject, DLABInputCaptureDelegate {
     
     /// Input ancillary packet callback. Use `dataSpace` to distinguish VANC and HANC packets.
     /// This is the preferred wrapper API for SDK 15.3+ ancillary packet capture.
-    /// Set before or during capture; `didSet` immediately applies to the current device.
-    public var inputAncillaryPacketHandler: InputAncillaryPacketHandler? = nil {
-        didSet {
+    /// Set before or during capture; the setter immediately applies to the current device.
+    private let inputAncillaryPacketHandlerLock = LockedOptionalValueBox<InputAncillaryPacketHandler>()
+    private var inputAncillaryPacketHandlerGeneration: UInt64 = 0
+    public var inputAncillaryPacketHandler: InputAncillaryPacketHandler? {
+        get { inputAncillaryPacketHandlerLock.value }
+        set {
+            let generation = inputAncillaryPacketHandlerLock.withLock { storage in
+                inputAncillaryPacketHandlerGeneration &+= 1
+                storage = newValue
+                return inputAncillaryPacketHandlerGeneration
+            }
             if let device = currentDevice {
-                applyInputAncillaryPacketHandler(to: device)
+                applyInputAncillaryPacketHandler(to: device, expectedGeneration: generation)
             }
         }
     }
@@ -817,7 +876,10 @@ public class CaptureManager: NSObject, DLABInputCaptureDelegate {
                 if (audioCaptureEnabled || videoCaptureEnabled) {
                     // Update inputVideoSetting
                     applyTimecodeSetting()
-                    applyInputAncillaryPacketHandler(to: device)
+                    applyInputAncillaryPacketHandler(
+                        to: device,
+                        expectedGeneration: currentInputAncillaryPacketHandlerGeneration()
+                    )
                     
                     // Start stream
                     device.inputDelegate = self
@@ -1188,12 +1250,21 @@ public class CaptureManager: NSObject, DLABInputCaptureDelegate {
         try device.setInputScreenPreviewTo(parentView)
     }
     
-    private func applyInputAncillaryPacketHandler(to device: DLABDevice) {
-        device.inputAncillaryPacketHandler = inputAncillaryPacketHandler
+    private func applyInputAncillaryPacketHandler(to device: DLABDevice, expectedGeneration: UInt64? = nil) {
+        inputAncillaryPacketHandlerLock.withLock { storage in
+            if let expectedGeneration, inputAncillaryPacketHandlerGeneration != expectedGeneration {
+                return
+            }
+            device.inputAncillaryPacketHandler = storage
+        }
     }
     
     private func clearInputAncillaryPacketHandler(from device: DLABDevice) {
         device.inputAncillaryPacketHandler = nil
+    }
+
+    private func currentInputAncillaryPacketHandlerGeneration() -> UInt64 {
+        inputAncillaryPacketHandlerLock.withLock { _ in inputAncillaryPacketHandlerGeneration }
     }
     
     private func calcTimescale() -> CMTimeScale {
