@@ -848,9 +848,10 @@ public class CaptureManager: NSObject, DLABInputCaptureDelegate {
                 if let vSetting = vSetting {
                     // Enable Video Preview
                     if let parentView = parentView {
-                        Task { @MainActor in
+                        Task { @MainActor [weak self] in
+                            guard let self = self else { return }
                             do {
-                                try attachInputScreenPreview(to: parentView) // @MainActor
+                                try self.attachInputScreenPreview(to: parentView) // @MainActor
                             } catch {
                                 self.printVerbose("ERROR: captureStartAsync - attachInputScreenPreview failed: \(error.localizedDescription)")
                                 self.previewError = error
