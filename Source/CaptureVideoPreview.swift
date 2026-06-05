@@ -53,6 +53,13 @@ fileprivate final class CaptureVideoPreviewCache: @unchecked Sendable {
         get { withLock { displayLinkValue } }
         set { withLock { displayLinkValue = newValue } }
     }
+    
+    // H-04: Guard to limit concurrent enqueue Tasks to max 1
+    private var enqueuePendingValue: Bool = false
+    var enqueuePending: Bool {
+        get { withLock { enqueuePendingValue } }
+        set { withLock { enqueuePendingValue = newValue } }
+    }
 }
 
 @MainActor
@@ -188,6 +195,9 @@ public class CaptureVideoPreview: NSView, CALayerDelegate {
         
         cache.prepared = false
         cache.donotEnqueue = true
+        // H-04: belt-and-suspenders reset; donotEnqueue already short-circuits the
+        // callback, but keep enqueuePending consistent for any future reference.
+        cache.enqueuePending = false
         
         if let caDisplayLink = cache.caDisplayLink, #available(macOS 14.0, *) {
             caDisplayLink.invalidate()
@@ -636,10 +646,16 @@ public class CaptureVideoPreview: NSView, CALayerDelegate {
                 guard let self = self else { return kCVReturnError }
                 
                 if cache.donotEnqueue {
-                    Task { @MainActor in
-                        printVerbose("NOTICE: DisplayLink is suspended. Ignore enqueue request (\(#function))")
+                    Task { @MainActor [weak self] in
+                        guard let self = self else { return }
+                        self.printVerbose("NOTICE: DisplayLink is suspended. Ignore enqueue request (\(#function))")
                     }
                     return kCVReturnError
+                }
+                
+                // H-04: Limit concurrent enqueue Tasks to max 1 to avoid unbounded generation
+                if cache.enqueuePending {
+                    return kCVReturnSuccess
                 }
                 
                 guard
@@ -653,9 +669,16 @@ public class CaptureVideoPreview: NSView, CALayerDelegate {
                 let nextVSync = lastVSync + refreshInterval // next vsync (next frame)
                 let expiredTimestamp = nextVSync + refreshInterval // next frame expired
                 
-                // Schedule enqueue on MainActor
-                Task { @MainActor in
-                    enqueue(targetTimestamp, expiredTimestamp)
+                // Schedule enqueue on MainActor (max 1 in-flight at a time)
+                cache.enqueuePending = true
+                Task { @MainActor [weak self] in
+                    guard let self = self else {
+                        // Self deallocated; cache goes with it, no reset needed.
+                        return
+                    }
+                    // Intentionally discard Bool: DisplayLink path drops per-frame failures.
+                    _ = self.enqueue(targetTimestamp, expiredTimestamp)
+                    self.cache.enqueuePending = false
                 }
                 return kCVReturnSuccess
             }
