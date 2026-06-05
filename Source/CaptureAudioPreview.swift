@@ -261,7 +261,7 @@ class CaptureAudioPreview: NSObject, @unchecked Sendable {
         return nil
     }
     
-    /// Increment queued buffer count
+    /// Decrement queued buffer count
     ///
     /// - Parameter show: debug dump the count
     /// - Returns: count of queued buffer
@@ -270,7 +270,13 @@ class CaptureAudioPreview: NSObject, @unchecked Sendable {
         var count = 0
         queueSync {
             count = numEnqueued - 1
-            assert(count >= 0, "ERROR: Enqueued Counter value error.")
+            // H-05: Preserve invariant in Release builds.
+            // assert() is compiled out in Release, so an underflow would silently wrap
+            // to Int.max and corrupt the counter. Clamp to 0 instead.
+            if count < 0 {
+                count = 0
+                print("WARNING: numEnqueued underflow clamped (counter imbalance?)")
+            }
             numEnqueued = count
             
             if show {
@@ -280,7 +286,7 @@ class CaptureAudioPreview: NSObject, @unchecked Sendable {
         return count
     }
     
-    /// Decrement queued buffer count
+    /// Increment queued buffer count
     ///
     /// - Parameter show: debug dump the count
     /// - Returns: count of queued buffer
@@ -289,7 +295,13 @@ class CaptureAudioPreview: NSObject, @unchecked Sendable {
         var count = 0
         queueSync {
             count = numEnqueued + 1
-            assert(count <= kNumberBuffer, "ERROR: Enqueued Counter value error.")
+            // H-05: Preserve invariant in Release builds.
+            // assert() is compiled out in Release, so an overflow would silently wrap
+            // to negative and corrupt the counter. Clamp to kNumberBuffer instead.
+            if count > kNumberBuffer {
+                count = kNumberBuffer
+                print("WARNING: numEnqueued overflow clamped at kNumberBuffer (counter imbalance?)")
+            }
             numEnqueued = count
             
             if show {
