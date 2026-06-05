@@ -646,10 +646,7 @@ public class CaptureVideoPreview: NSView, CALayerDelegate {
                 guard let self = self else { return kCVReturnError }
                 
                 if cache.donotEnqueue {
-                    Task { @MainActor [weak self] in
-                        guard let self = self else { return }
-                        self.printVerbose("NOTICE: DisplayLink is suspended. Ignore enqueue request (\(#function))")
-                    }
+                    self.printVerbose("NOTICE: DisplayLink is suspended. Ignore enqueue request (\(#function))")
                     return kCVReturnError
                 }
                 

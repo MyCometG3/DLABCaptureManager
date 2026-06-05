@@ -271,8 +271,8 @@ class CaptureAudioPreview: NSObject, @unchecked Sendable {
         queueSync {
             count = numEnqueued - 1
             // H-05: Preserve invariant in Release builds.
-            // assert() is compiled out in Release, so an underflow would silently wrap
-            // to Int.max and corrupt the counter. Clamp to 0 instead.
+            // assert() is compiled out in Release, so an unexpected extra dequeue
+            // can drive the counter negative. Clamp to 0 instead.
             if count < 0 {
                 count = 0
                 print("WARNING: numEnqueued underflow clamped (counter imbalance?)")
@@ -296,8 +296,8 @@ class CaptureAudioPreview: NSObject, @unchecked Sendable {
         queueSync {
             count = numEnqueued + 1
             // H-05: Preserve invariant in Release builds.
-            // assert() is compiled out in Release, so an overflow would silently wrap
-            // to negative and corrupt the counter. Clamp to kNumberBuffer instead.
+            // assert() is compiled out in Release, so an unexpected extra enqueue
+            // can drive the counter above kNumberBuffer. Clamp instead.
             if count > kNumberBuffer {
                 count = kNumberBuffer
                 print("WARNING: numEnqueued overflow clamped at kNumberBuffer (counter imbalance?)")

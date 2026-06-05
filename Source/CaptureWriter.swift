@@ -422,10 +422,10 @@ actor CaptureWriter {
             // - internalError after close: error from stopRecording() itself
             //   (e.g. finishWritingTimedOut, unexpectedErrorWhileClosingSession).
             if let priorWriteError = priorWriteError {
-                diagnosticHandler?(.reopenCloseFailed(reason: priorWriteError.localizedDescription))
+                diagnosticHandler?(.reopenCloseFailed(reason: "prior write error: \(priorWriteError.localizedDescription)"))
             }
             if let closeError = internalError {
-                diagnosticHandler?(.reopenCloseFailed(reason: closeError.localizedDescription))
+                diagnosticHandler?(.reopenCloseFailed(reason: "closeSession error: \(closeError.localizedDescription)"))
             }
         }
         
