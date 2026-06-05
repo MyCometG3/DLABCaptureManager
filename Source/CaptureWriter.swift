@@ -66,6 +66,7 @@ enum CaptureWriterError: Swift.Error, LocalizedError {
 public enum CaptureWriterDiagnostic: Sendable, Equatable {
     case deinitWhileRecording
     case finishWritingTimedOut(timeoutSeconds: Double)
+    case reopenCloseFailed(reason: String)
 }
 
 /// Thread safe backing store - works with deinit and nonisolated func.
@@ -408,8 +409,13 @@ actor CaptureWriter {
         openSessionStartedAt = CFAbsoluteTimeGetCurrent()
         loggedFirstVideoAppend = false
         
+        // H-06: If a previous session is still open, close it first to recover writer state.
         if isRecording {
             await closeSession()
+            // H-06: Surface the close error from the previous session via diagnostic.
+            if let priorError = internalError {
+                diagnosticHandler?(.reopenCloseFailed(reason: priorError.localizedDescription))
+            }
         }
         
         if movieURL == nil {
