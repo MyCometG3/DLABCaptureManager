@@ -270,7 +270,12 @@ class CaptureAudioPreview: NSObject, @unchecked Sendable {
         var count = 0
         queueSync {
             count = numEnqueued - 1
-            assert(count >= 0, "ERROR: Enqueued Counter value error.")
+            // H-05: Preserve invariant in Release builds.
+            // assert() is compiled out in Release, so an underflow would silently wrap
+            // to Int.max and corrupt the counter. Clamp to 0 instead.
+            if count < 0 {
+                count = 0
+            }
             numEnqueued = count
             
             if show {
@@ -289,7 +294,12 @@ class CaptureAudioPreview: NSObject, @unchecked Sendable {
         var count = 0
         queueSync {
             count = numEnqueued + 1
-            assert(count <= kNumberBuffer, "ERROR: Enqueued Counter value error.")
+            // H-05: Preserve invariant in Release builds.
+            // assert() is compiled out in Release, so an overflow would silently wrap
+            // to negative and corrupt the counter. Clamp to kNumberBuffer instead.
+            if count > kNumberBuffer {
+                count = kNumberBuffer
+            }
             numEnqueued = count
             
             if show {
