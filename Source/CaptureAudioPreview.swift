@@ -261,7 +261,7 @@ class CaptureAudioPreview: NSObject, @unchecked Sendable {
         return nil
     }
     
-    /// Increment queued buffer count
+    /// Decrement queued buffer count
     ///
     /// - Parameter show: debug dump the count
     /// - Returns: count of queued buffer
@@ -275,6 +275,7 @@ class CaptureAudioPreview: NSObject, @unchecked Sendable {
             // to Int.max and corrupt the counter. Clamp to 0 instead.
             if count < 0 {
                 count = 0
+                print("WARNING: numEnqueued underflow clamped (counter imbalance?)")
             }
             numEnqueued = count
             
@@ -285,7 +286,7 @@ class CaptureAudioPreview: NSObject, @unchecked Sendable {
         return count
     }
     
-    /// Decrement queued buffer count
+    /// Increment queued buffer count
     ///
     /// - Parameter show: debug dump the count
     /// - Returns: count of queued buffer
@@ -299,6 +300,7 @@ class CaptureAudioPreview: NSObject, @unchecked Sendable {
             // to negative and corrupt the counter. Clamp to kNumberBuffer instead.
             if count > kNumberBuffer {
                 count = kNumberBuffer
+                print("WARNING: numEnqueued overflow clamped at kNumberBuffer (counter imbalance?)")
             }
             numEnqueued = count
             
