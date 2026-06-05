@@ -195,6 +195,9 @@ public class CaptureVideoPreview: NSView, CALayerDelegate {
         
         cache.prepared = false
         cache.donotEnqueue = true
+        // H-04: belt-and-suspenders reset; donotEnqueue already short-circuits the
+        // callback, but keep enqueuePending consistent for any future reference.
+        cache.enqueuePending = false
         
         if let caDisplayLink = cache.caDisplayLink, #available(macOS 14.0, *) {
             caDisplayLink.invalidate()
@@ -673,6 +676,7 @@ public class CaptureVideoPreview: NSView, CALayerDelegate {
                         // Self deallocated; cache goes with it, no reset needed.
                         return
                     }
+                    // Intentionally discard Bool: DisplayLink path drops per-frame failures.
                     _ = self.enqueue(targetTimestamp, expiredTimestamp)
                     self.cache.enqueuePending = false
                 }
