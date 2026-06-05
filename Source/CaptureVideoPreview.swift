@@ -670,7 +670,7 @@ public class CaptureVideoPreview: NSView, CALayerDelegate {
                 cache.enqueuePending = true
                 Task { @MainActor [weak self] in
                     guard let self = self else {
-                        self?.cache.enqueuePending = false
+                        // Self deallocated; cache goes with it, no reset needed.
                         return
                     }
                     _ = self.enqueue(targetTimestamp, expiredTimestamp)
