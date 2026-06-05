@@ -128,7 +128,7 @@ private final class BoundedWorkQueue: @unchecked Sendable {
 
 private final class WeakParentViewBox: @unchecked Sendable {
     weak var view: NSView?
-
+    
     init(view: NSView?) {
         self.view = view
     }
@@ -137,7 +137,7 @@ private final class WeakParentViewBox: @unchecked Sendable {
 private final class LockedWeakReferenceBox<Value: AnyObject>: @unchecked Sendable {
     private let lock = UnfairLockBox()
     private weak var storage: Value?
-
+    
     var value: Value? {
         get { lock.withLock { storage } }
         set { lock.withLock { storage = newValue } }
@@ -147,13 +147,13 @@ private final class LockedWeakReferenceBox<Value: AnyObject>: @unchecked Sendabl
 private final class LockedOptionalValueBox<Value>: @unchecked Sendable {
     private let lock = UnfairLockBox()
     private var storage: Value?
-
+    
     func withLock<T>(_ body: (inout Value?) -> T) -> T {
         lock.withLock {
             body(&storage)
         }
     }
-
+    
     var value: Value? {
         get { withLock { $0 } }
         set { withLock { $0 = newValue } }
@@ -163,7 +163,7 @@ private final class LockedOptionalValueBox<Value>: @unchecked Sendable {
 private struct AudioPreviewDisposeFailure: LocalizedError {
     let stopError: NSError
     let disposeError: NSError
-
+    
     var errorDescription: String? {
         "Audio preview teardown failed."
     }
@@ -220,6 +220,7 @@ public class CaptureManager: NSObject, DLABInputCaptureDelegate {
         var lastRecordedMoviePostProcessError: Error? = nil
         var stopError: (any Error)? = nil
         var audioPreviewError: (any Error)? = nil
+        var previewError: (any Error)? = nil
         var currentDevice: DLABDevice? = nil
         var audioCaptureEnabled: Bool = false
         var videoCaptureEnabled: Bool = false
@@ -569,6 +570,19 @@ public class CaptureManager: NSObject, DLABInputCaptureDelegate {
         withRuntimeState { $0.audioPreviewError = nil }
     }
     
+    /// Last video preview failure (attachInputScreenPreview), if any.
+    /// Overwritten on each new failure; not cleared automatically.
+    /// Use ``clearPreviewError()`` to reset after handling.
+    public private(set) var previewError: (any Error)? {
+        get { runtimeStateValue(\.previewError) }
+        set { withRuntimeState { $0.previewError = newValue } }
+    }
+    
+    /// Clear the last video preview error.
+    public func clearPreviewError() {
+        withRuntimeState { $0.previewError = nil }
+    }
+    
     /// Optional callback for non-fatal `CaptureWriter` diagnostics during fallback cleanup.
     public var captureWriterDiagnosticHandler: (@Sendable (CaptureWriterDiagnostic) -> Void)? = nil
     
@@ -834,8 +848,14 @@ public class CaptureManager: NSObject, DLABInputCaptureDelegate {
                 if let vSetting = vSetting {
                     // Enable Video Preview
                     if let parentView = parentView {
-                        Task { @MainActor in
-                            try attachInputScreenPreview(to: parentView) // @MainActor
+                        Task { @MainActor [weak self] in
+                            guard let self = self else { return }
+                            do {
+                                try self.attachInputScreenPreview(to: parentView) // @MainActor
+                            } catch {
+                                self.printVerbose("ERROR: captureStartAsync - attachInputScreenPreview failed: \(error.localizedDescription)")
+                                self.previewError = error
+                            }
                         }
                     }
                     if let videoPreview = videoPreview {
@@ -1262,7 +1282,7 @@ public class CaptureManager: NSObject, DLABInputCaptureDelegate {
     private func clearInputAncillaryPacketHandler(from device: DLABDevice) {
         device.inputAncillaryPacketHandler = nil
     }
-
+    
     private func currentInputAncillaryPacketHandlerGeneration() -> UInt64 {
         inputAncillaryPacketHandlerLock.withLock { _ in inputAncillaryPacketHandlerGeneration }
     }
