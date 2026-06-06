@@ -404,12 +404,23 @@ actor CaptureWriter {
     /* ============================================ */
     
     /// Start writing session
+    ///
     /// - Note: If any error occurs, it will be stored in `internalError`.
+    ///
+    /// - Warning: `openSession()` is **not** intended to be called concurrently from
+    ///   multiple tasks. Because `openSession()` can suspend in `await closeSession()`
+    ///   (see H-06 close-and-restart branch below), callers must serialize session
+    ///   lifecycle transitions externally. The actor model guarantees that two
+    ///   `openSession()` invocations on the same instance are not literally running
+    ///   at the same time, but their reentrancy via the `await closeSession()` point
+    ///   can still interleave their effects on `isRecording` / `startRecording()`.
     public func openSession() async {
         openSessionStartedAt = CFAbsoluteTimeGetCurrent()
         loggedFirstVideoAppend = false
         
         // H-06: If a previous session is still open, close it first to recover writer state.
+        // M-06: This `await closeSession()` is a reentrancy point; concurrent callers
+        //       of openSession() can interleave here. See openSession() contract.
         if isRecording {
             // Capture any in-flight write error from the previous session BEFORE
             // closeSession() resets internalError at its start.

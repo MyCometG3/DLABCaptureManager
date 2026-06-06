@@ -221,6 +221,12 @@ public class CaptureManager: NSObject, DLABInputCaptureDelegate {
         var stopError: (any Error)? = nil
         var audioPreviewError: (any Error)? = nil
         var previewError: (any Error)? = nil
+        // M-01: writer.appendSampleBuffer failure observability
+        var lastAppendError: (any Error)? = nil
+        var appendErrorCount: Int = 0
+        var appendErrorMediaType: String? = nil
+        // M-03: captureStartAsync / rollbackCaptureStart failure observability
+        var lastStartError: (any Error)? = nil
         var currentDevice: DLABDevice? = nil
         var audioCaptureEnabled: Bool = false
         var videoCaptureEnabled: Bool = false
@@ -557,6 +563,19 @@ public class CaptureManager: NSObject, DLABInputCaptureDelegate {
         set { withRuntimeState { $0.stopError = newValue } }
     }
     
+    /// Error from the last `captureStartAsync()` call (or its rollback), if start failed.
+    /// Overwritten on each new failure; not cleared automatically.
+    /// Use ``clearLastStartError()`` to reset after handling.
+    public private(set) var lastStartError: (any Error)? {
+        get { runtimeStateValue(\.lastStartError) }
+        set { withRuntimeState { $0.lastStartError = newValue } }
+    }
+    
+    /// Clear the last start error.
+    public func clearLastStartError() {
+        withRuntimeState { $0.lastStartError = nil }
+    }
+    
     /// Last audio preview failure (enqueue/aqPrime/aqStart), if any.
     /// Overwritten on each new failure; not cleared automatically.
     /// Use ``clearAudioPreviewError()`` to reset after handling.
@@ -581,6 +600,33 @@ public class CaptureManager: NSObject, DLABInputCaptureDelegate {
     /// Clear the last video preview error.
     public func clearPreviewError() {
         withRuntimeState { $0.previewError = nil }
+    }
+    
+    /// Last `writer.appendSampleBuffer` failure (audio / video / timecode), if any.
+    /// Overwritten on each new failure; not cleared automatically.
+    /// Use ``clearLastAppendError()`` to reset after handling.
+    public private(set) var lastAppendError: (any Error)? {
+        get { runtimeStateValue(\.lastAppendError) }
+        set { withRuntimeState { $0.lastAppendError = newValue } }
+    }
+    
+    /// Cumulative count of `writer.appendSampleBuffer` failures since the last clear.
+    public var appendErrorCount: Int {
+        get { runtimeStateValue(\.appendErrorCount) }
+    }
+    
+    /// Media type string ("audio" / "video" / "timecode") of the most recent append failure.
+    public var appendErrorMediaType: String? {
+        get { runtimeStateValue(\.appendErrorMediaType) }
+    }
+    
+    /// Clear the last append error and reset the cumulative counter.
+    public func clearLastAppendError() {
+        withRuntimeState {
+            $0.lastAppendError = nil
+            $0.appendErrorCount = 0
+            $0.appendErrorMediaType = nil
+        }
     }
     
     /// Optional callback for non-fatal `CaptureWriter` diagnostics during fallback cleanup.
@@ -703,7 +749,28 @@ public class CaptureManager: NSObject, DLABInputCaptureDelegate {
     public var timecodeFormatType : CMTimeCodeFormatType = kCMTimeCodeFormatType_TimeCode32
     
     /// Validate if source provides timecode of specified type. Set before ``captureStartAsync()``.
-    public var timecodeSource :TimecodeType? = nil
+    ///
+    /// M-14: backed by a `LockedOptionalValueBox` so callback / async code can read
+    /// the value safely. The setter enforces the set-before-capture contract:
+    /// when `running == true`, assignment is **ignored** with a `printVerbose` warning
+    /// (existing value is preserved). This protects against in-flight timecode
+    /// processing being desynchronized from `currentTimecodeHelper()`.
+    private let timecodeSourceLock = LockedOptionalValueBox<TimecodeType>()
+    public var timecodeSource: TimecodeType? {
+        get { timecodeSourceLock.value }
+        set {
+            let shouldIgnore = withRuntimeState { state in
+                if state.running {
+                    return true
+                }
+                timecodeSourceLock.value = newValue
+                return false
+            }
+            if shouldIgnore {
+                printVerbose("WARNING:CaptureManager.timecodeSource - change requested while capture is running; ignoring (existing value preserved)")
+            }
+        }
+    }
     
     /* ============================================ */
     // MARK: - properties - Capturing ancillary data
@@ -913,12 +980,26 @@ public class CaptureManager: NSObject, DLABInputCaptureDelegate {
                 }
             } catch let error as NSError {
                 printVerbose("ERROR:\(error.domain)(\(error.code)): \(error.localizedFailureReason ?? "unknown reason")")
+                // M-03: record start failure for observability
+                withRuntimeState { $0.lastStartError = error }
                 if let device = currentDevice {
                     await rollbackCaptureStart(on: device)
                 }
             }
         }  else {
-            printVerbose("ERROR: device is not ready")
+            let snapshot = withRuntimeState { state in
+                state.running
+            }
+            let reason = snapshot ? "capture is already running" : "device is not ready"
+            printVerbose("ERROR: \(reason)")
+            // M-03: there is no thrown Error to surface in this precondition
+            // path (missing currentDevice, or capture already running), so
+            // synthesize one in the shared DLABCapture error domain so
+            // callers reading lastStartError can observe why start failed.
+            let preconditionError = createError(OSStatus(-1),
+                                                "CaptureManager.captureStartAsync",
+                                                reason)
+            withRuntimeState { $0.lastStartError = preconditionError }
         }
         return false
     }
@@ -926,7 +1007,12 @@ public class CaptureManager: NSObject, DLABInputCaptureDelegate {
     /// Stop capture session
     @discardableResult
     public func captureStopAsync() async -> Bool {
-        if let device = currentDevice, running == true {
+        // M-02: atomic snapshot of (currentDevice, running) under single lock
+        // to avoid TOCTOU between the two getter calls.
+        let snapshot = withRuntimeState { state in
+            (currentDevice: state.currentDevice, running: state.running)
+        }
+        if let device = snapshot.currentDevice, snapshot.running {
             stopError = nil
             if recording {
                 await recordToggleAsync() // actor isolated (writer)
@@ -1012,6 +1098,8 @@ public class CaptureManager: NSObject, DLABInputCaptureDelegate {
                 audioCaptureEnabled = false
             } catch let error as NSError {
                 printVerbose("ERROR:CaptureManager.rollbackCaptureStart - disableAudioInput failed: \(error.domain)(\(error.code)): \(error.localizedFailureReason ?? error.localizedDescription)")
+                // M-03: surface rollback failure
+                withRuntimeState { $0.lastStartError = error }
             }
         }
         if videoCaptureEnabled {
@@ -1020,6 +1108,8 @@ public class CaptureManager: NSObject, DLABInputCaptureDelegate {
                 videoCaptureEnabled = false
             } catch let error as NSError {
                 printVerbose("ERROR:CaptureManager.rollbackCaptureStart - disableVideoInput failed: \(error.domain)(\(error.code)): \(error.localizedFailureReason ?? error.localizedDescription)")
+                // M-03: surface rollback failure
+                withRuntimeState { $0.lastStartError = error }
             }
         }
         
@@ -1033,6 +1123,8 @@ public class CaptureManager: NSObject, DLABInputCaptureDelegate {
                 try await attachInputScreenPreview(to: nil)
             } catch let error as NSError {
                 printVerbose("ERROR:CaptureManager.rollbackCaptureStart - attachInputScreenPreview failed: \(error.domain)(\(error.code)): \(error.localizedFailureReason ?? error.localizedDescription)")
+                // M-03: surface rollback failure
+                withRuntimeState { $0.lastStartError = error }
             }
         }
         
@@ -1040,6 +1132,8 @@ public class CaptureManager: NSObject, DLABInputCaptureDelegate {
             try await disposeAudioPreview()
         } catch let error as NSError {
             printVerbose("ERROR:CaptureManager.rollbackCaptureStart - disposeAudioPreview failed: \(error.domain)(\(error.code)): \(error.localizedFailureReason ?? error.localizedDescription)")
+            // M-03: surface rollback failure
+            withRuntimeState { $0.lastStartError = error }
         }
         
         timecodeReady = false
@@ -1507,6 +1601,14 @@ public class CaptureManager: NSObject, DLABInputCaptureDelegate {
                 try await writer.appendSampleBuffer(wrapper: wrapper, mediaType: .audio)
             } catch {
                 printVerbose("ERROR:CaptureManager.\(#function) - audio append failed: \(error.localizedDescription)")
+                // M-01: record append failure for observability (getter only;
+                // no new CaptureWriterDiagnostic case, to avoid a source-breaking
+                // addition to the public enum).
+                withRuntimeState { state in
+                    state.lastAppendError = error
+                    state.appendErrorCount += 1
+                    state.appendErrorMediaType = "audio"
+                }
             }
         }
         withAudioPreview { preview in
@@ -1563,6 +1665,14 @@ public class CaptureManager: NSObject, DLABInputCaptureDelegate {
                 try await writer.appendSampleBuffer(wrapper: wrapper, mediaType: .video)
             } catch {
                 printVerbose("ERROR:CaptureManager.\(#function) - video append failed: \(error.localizedDescription)")
+                // M-01: record append failure for observability (getter only;
+                // no new CaptureWriterDiagnostic case, to avoid a source-breaking
+                // addition to the public enum).
+                withRuntimeState { state in
+                    state.lastAppendError = error
+                    state.appendErrorCount += 1
+                    state.appendErrorMediaType = "video"
+                }
             }
         }
         
@@ -1583,6 +1693,14 @@ public class CaptureManager: NSObject, DLABInputCaptureDelegate {
                             try await writer.appendSampleBuffer(wrapper: wrapper, mediaType: .timecode)
                         } catch {
                             printVerbose("ERROR:CaptureManager.\(#function) - device timecode append failed: \(error.localizedDescription)")
+                            // M-01: record append failure for observability (getter only;
+                            // no new CaptureWriterDiagnostic case, to avoid a source-breaking
+                            // addition to the public enum).
+                            withRuntimeState { state in
+                                state.lastAppendError = error
+                                state.appendErrorCount += 1
+                                state.appendErrorMediaType = "timecode"
+                            }
                         }
                     }
                     
@@ -1604,6 +1722,14 @@ public class CaptureManager: NSObject, DLABInputCaptureDelegate {
                             try await writer.appendSampleBuffer(wrapper: wrapper, mediaType: .timecode)
                         } catch {
                             printVerbose("ERROR:CaptureManager.\(#function) - core audio timecode append failed: \(error.localizedDescription)")
+                            // M-01: record append failure for observability (getter only;
+                            // no new CaptureWriterDiagnostic case, to avoid a source-breaking
+                            // addition to the public enum).
+                            withRuntimeState { state in
+                                state.lastAppendError = error
+                                state.appendErrorCount += 1
+                                state.appendErrorMediaType = "timecode"
+                            }
                         }
                     }
                     
