@@ -159,6 +159,25 @@ private final class DispatchWorkItemBox: @unchecked Sendable {
     }
 }
 
+/// Lightweight cancellation flag for the timeout `DispatchWorkItem` in
+/// `waitForFinishWriting(_:timeoutSeconds:)`. `DispatchWorkItem.cancel()`
+/// does not prevent a dequeued work item from running, so the body must
+/// check this flag explicitly to short-circuit when the success path has
+/// already won the race. Correctness is still guaranteed by
+/// `FinishWritingResumeState.resumed` as a second line of defense.
+private final class TimeoutFlag: @unchecked Sendable {
+    private let lock = UnfairLockBox()
+    private var value: Bool = false
+    
+    var isCancelled: Bool {
+        lock.withLock { value }
+    }
+    
+    func markCancelled() {
+        lock.withLock { value = true }
+    }
+}
+
 /// Movie writer used by `CaptureManager` and other callers that need explicit
 /// start/stop control over `AVAssetWriter`.
 ///
@@ -658,13 +677,20 @@ actor CaptureWriter {
                 }
             }
             
+            // The body short-circuits when the success path has already won the race.
+            // `DispatchWorkItem.cancel()` does not stop a dequeued work item from
+            // running; `FinishWritingResumeState.resumed` would silently drop the
+            // duplicate `settle()` call, so this only avoids unnecessary overhead.
+            let timeoutFlag = TimeoutFlag()
             let timeoutWorkItem = DispatchWorkItem {
+                guard !timeoutFlag.isCancelled else { return }
                 settle(false, true)
             }
             let timeoutWorkItemBox = DispatchWorkItemBox(workItem: timeoutWorkItem)
             DispatchQueue.global().asyncAfter(deadline: .now() + timeoutSeconds, execute: timeoutWorkItem)
             
             avAssetWriter.finishWriting {
+                timeoutFlag.markCancelled()
                 timeoutWorkItemBox.workItem.cancel()
                 settle(true, false)
             }
